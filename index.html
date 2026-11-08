@@ -3,27 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AIコンパニオンVR</title>
+<title>窓際の席</title>
 <style>
-  :root { --bg:#14161c; --panel:#1e2129; --fg:#e8e9ee; --muted:#9aa0ad; --accent:#7cc4ff; --line:#333846; }
+  :root { --bg:#1a1613; --glass:rgba(28,24,21,.72); --fg:#f3ece3; --muted:#b9ada0; --accent:#e8b980; --line:rgba(255,255,255,.12); }
   * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; overflow:hidden; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:"Hiragino Sans","Noto Sans JP",system-ui,sans-serif; overflow:hidden; }
   canvas { display:block; }
-  #panel { position:fixed; top:12px; left:12px; width:min(380px,calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:auto;
-           background:rgba(30,33,41,.94); border:1px solid var(--line); border-radius:12px; padding:14px 16px; z-index:10; }
-  #panel.min .body { display:none; }
-  h1 { font-size:16px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center; }
-  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
-  input,select,textarea { width:100%; background:#11131a; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:14px; font-family:inherit; }
-  textarea { height:84px; resize:vertical; }
-  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
-  button { background:#2a2f3b; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:14px; cursor:pointer; }
-  button.primary { background:var(--accent); color:#0b1020; border-color:var(--accent); font-weight:600; }
-  #status { font-size:13px; margin-top:10px; color:var(--accent); min-height:1.2em; }
-  #log { font-size:12px; color:var(--muted); margin-top:8px; max-height:140px; overflow:auto; white-space:pre-wrap; }
-  .note { font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px; }
-  #toggle { padding:2px 8px; font-size:12px; }
-  #VRButton { z-index:20; }
+  button { font:inherit; color:var(--fg); background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:999px; padding:9px 16px; cursor:pointer; }
+  button:hover { background:rgba(255,255,255,.14); }
+  button.primary { background:var(--accent); color:#2a1d10; border-color:var(--accent); font-weight:700; }
+  input, select, textarea { font:inherit; color:var(--fg); background:rgba(0,0,0,.35); border:1px solid var(--line); border-radius:10px; padding:9px 12px; }
+  .glass { background:var(--glass); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border:1px solid var(--line); }
+
+  /* 入店画面 */
+  #enter { position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, rgba(40,30,22,.55), rgba(10,8,6,.85)); }
+  #enter .card { padding:32px 36px; border-radius:20px; text-align:center; max-width:420px; margin:16px; }
+  #enter h1 { font-weight:500; letter-spacing:.2em; margin:0 0 8px; font-size:24px; }
+  #enter p { color:var(--muted); font-size:14px; line-height:1.7; margin:0 0 20px; }
+  #enter .row { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+  /* 上部 */
+  #top { position:fixed; top:14px; left:14px; right:14px; display:flex; justify-content:space-between; align-items:center; gap:10px; z-index:10; pointer-events:none; }
+  #top > * { pointer-events:auto; }
+  #pill { padding:7px 14px; border-radius:999px; font-size:13px; display:flex; align-items:center; gap:8px; }
+  #pill .dot { width:8px; height:8px; border-radius:50%; background:#777; }
+  #pill.on .dot { background:#7fd18b; }
+  #pill.talking .dot { background:var(--accent); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity:.35; } }
+  #topRight { display:flex; gap:8px; align-items:center; padding:6px 8px; border-radius:999px; }
+  #topRight label { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; padding:0 6px; }
+  #topRight select { padding:5px 8px; border-radius:999px; font-size:13px; }
+  #topRight input[type=range] { width:80px; accent-color:var(--accent); }
+  #topRight button { padding:6px 12px; font-size:13px; }
+
+  /* 下部の会話バー */
+  #bar { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); width:min(720px, calc(100vw - 24px)); display:flex; gap:8px; align-items:center; padding:8px; border-radius:999px; z-index:10; }
+  #mic { width:46px; height:46px; padding:0; flex:none; position:relative; }
+  #mic svg { width:20px; height:20px; vertical-align:middle; }
+  #mic.off { opacity:.55; }
+  #mic.off::after { content:""; position:absolute; left:10px; right:10px; top:50%; height:2px; background:#f08a7a; transform:rotate(-45deg); }
+  #mic .ring { position:absolute; inset:-4px; border-radius:50%; border:2px solid var(--accent); opacity:0; transition:opacity .08s, transform .08s; pointer-events:none; }
+  #msg { flex:1; min-width:0; border-radius:999px; padding:12px 16px; background:rgba(0,0,0,.3); border:none; }
+  #send { flex:none; }
+  #orderBtn { flex:none; }
+
+  /* 注文 */
+  #order { position:fixed; bottom:84px; left:50%; transform:translateX(-50%); width:min(460px, calc(100vw - 24px)); padding:16px; border-radius:18px; z-index:12; display:none; }
+  #order.open { display:block; }
+  #order h3 { margin:0 0 10px; font-weight:500; font-size:15px; letter-spacing:.1em; }
+  #drinks { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:8px; }
+  #drinks button { border-radius:12px; text-align:left; padding:10px 12px; }
+  #drinks small { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+  #order .opt { margin-top:12px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px; }
+
+  /* 設定 */
+  #settings { position:fixed; inset:0; z-index:40; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+  #settings.open { display:flex; }
+  #settings .card { width:min(460px, calc(100vw - 24px)); max-height:calc(100vh - 32px); overflow:auto; padding:20px; border-radius:18px; }
+  #settings h2 { margin:0 0 6px; font-size:17px; font-weight:500; }
+  #settings label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
+  #settings input, #settings select, #settings textarea { width:100%; }
+  #settings textarea { height:110px; resize:vertical; }
+  #settings .row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+  #log { font-size:12px; color:var(--muted); margin-top:10px; max-height:150px; overflow:auto; white-space:pre-wrap; background:rgba(0,0,0,.25); border-radius:10px; padding:8px; }
+  .note { font-size:12px; color:var(--muted); line-height:1.6; margin-top:10px; }
+  #toast { position:fixed; left:50%; bottom:86px; transform:translateX(-50%); padding:8px 14px; border-radius:999px; font-size:13px; z-index:11; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #toast.show { opacity:1; }
+  #VRButton { top:70px !important; bottom:auto !important; left:14px !important; width:auto !important; padding:8px 14px !important; font-size:12px !important; }
+  @media (max-width:560px) { #topRight label span { display:none; } #orderBtn span { display:none; } }
 </style>
 <script type="importmap">
 { "imports": {
@@ -33,12 +80,54 @@
 </script>
 </head>
 <body>
-<div id="panel">
-  <h1><span>AIコンパニオンVR</span><button id="toggle">たたむ</button></h1>
-  <div class="body">
+
+<div id="enter">
+  <div class="card glass">
+    <h1>窓際の席</h1>
+    <p>都内の小さなカフェ。<br>向かいの席で、ミナが待っています。</p>
+    <div class="row">
+      <button class="primary" id="enterBtn">お店に入る</button>
+      <button id="enterSettings">設定</button>
+    </div>
+    <p class="note" id="enterNote" style="margin:14px 0 0"></p>
+  </div>
+</div>
+
+<div id="top">
+  <div id="pill" class="glass"><span class="dot"></span><span id="pillText">準備中</span></div>
+  <div id="topRight" class="glass">
+    <label><span>時間</span>
+      <select id="timeSel">
+        <option value="auto">いまの時刻</option><option value="day">昼</option><option value="evening">夕方</option><option value="night">夜</option>
+      </select>
+    </label>
+    <label><span>BGM</span><input id="bgmVol" type="range" min="0" max="100" value="35"></label>
+    <button id="openSettings">設定</button>
+  </div>
+</div>
+
+<div id="bar" class="glass">
+  <button id="mic" title="マイクのオン・オフ"><span class="ring"></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+  </button>
+  <input id="msg" placeholder="声で話すか、ここに文字で書いてください" autocomplete="off">
+  <button id="send">送る</button>
+  <button id="orderBtn">注文<span>する</span></button>
+</div>
+<div id="toast" class="glass"></div>
+
+<div id="order" class="glass">
+  <h3>メニュー</h3>
+  <div id="drinks"></div>
+  <label class="opt"><input type="checkbox" id="orderForMina" checked> ミナの分も頼む（ミナが自分で選ぶ）</label>
+</div>
+
+<div id="settings">
+  <div class="card glass">
+    <h2>設定</h2>
     <label>Gemini APIキー（この端末のブラウザにだけ保存）</label>
     <input id="key" type="password" autocomplete="off" placeholder="AIza...">
-    <label>キャラクター名</label>
+    <label>名前</label>
     <input id="name" value="ミナ">
     <label>性格・設定</label>
     <textarea id="persona">24歳の女性。東京近郊で一人暮らしをしながら、平日は会社で働いている。落ち着いていて、声のトーンはやわらかい。日常の小さな楽しみを大事にしていて、季節の食べもの、コンビニの新作、今日の天気、散歩の途中で見つけたもの、好きな音楽、休日の喫茶店の話なんかをよくする。相手を急かさず、同じ目線でゆっくり話す。たまに自分のちょっとした失敗談も笑って話す。プレイヤーとは気の置けない仲で、一緒にいると肩の力が抜ける存在。自然なタメ口で話す。</textarea>
@@ -50,17 +139,12 @@
     <label>モデル（通常は変更不要）</label>
     <input id="model" value="gemini-2.5-flash-native-audio-preview-12-2025">
     <div class="row">
-      <button class="primary" id="start">接続して会話開始</button>
-      <button id="mute">マイク: ON</button>
+      <button class="primary" id="saveSettings">保存してつなぎ直す</button>
       <button id="forget">記憶リセット</button>
+      <button id="closeSettings">閉じる</button>
     </div>
-    <div id="status">APIキーを入れて「接続して会話開始」→ 右下の ENTER VR</div>
     <div id="log"></div>
-    <div class="note">
-      VR操作：左スティック移動／右スティック回転／グリップかトリガーで物をつかむ／A・Xボタンでマイク切替。<br>
-      「ボール取って」「こっち来て」「手振って」などと話しかけると動きます。頭をなでたり肩をつついたりすると反応します。<br>
-      PC：ドラッグで視点、WASDで移動。
-    </div>
+    <div class="note">ドラッグで店内を見回せます。ミナの頭をドラッグするとなでられます。マイクのボタンで声のオン・オフ、文字で送ると声で返事が来ます。</div>
   </div>
 </div>
 
@@ -68,328 +152,440 @@
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 
-// ---------- settings ----------
+// ================= 設定・記憶 =================
 const $ = id => document.getElementById(id);
 const store = {
   get(k, d) { try { const v = localStorage.getItem('vrc_' + k); return v === null ? d : v; } catch { return d; } },
   set(k, v) { try { localStorage.setItem('vrc_' + k, v); } catch {} },
 };
-for (const k of ['key', 'name', 'persona', 'voice', 'model']) { const v = store.get(k, null); if (v !== null) $(k).value = v; }
-// 旧バージョンの初期設定のままなら、新しい性格に置き換える（会話の記憶はそのまま）
-if ($('persona').value === '明るくて好奇心旺盛な女の子。ちょっと天然で、タメ口で話す。プレイヤーとは仲の良い友達。この小さな世界で一緒に暮らしている。') { $('persona').value = $('persona').defaultValue; store.set('persona', $('persona').value); }
-$('toggle').onclick = () => { $('panel').classList.toggle('min'); $('toggle').textContent = $('panel').classList.contains('min') ? 'ひらく' : 'たたむ'; };
-const status = t => { $('status').textContent = t; };
+const FIELDS = ['key', 'name', 'persona', 'voice', 'model'];
+for (const k of FIELDS) { const v = store.get(k, null); if (v !== null) $(k).value = v; }
+if ($('persona').value.startsWith('明るくて好奇心旺盛な女の子')) { $('persona').value = $('persona').defaultValue; store.set('persona', $('persona').value); }
 const log = t => { const el = $('log'); el.textContent += t + '\n'; el.scrollTop = el.scrollHeight; };
-
-// ---------- memory ----------
+const charName = () => $('name').value.trim() || 'ミナ';
 let memory = []; try { memory = JSON.parse(store.get('memory', '[]')); } catch { memory = []; }
 const remember = line => { memory.push(line); memory = memory.slice(-80); store.set('memory', JSON.stringify(memory)); };
-$('forget').onclick = () => { memory = []; store.set('memory', '[]'); log('（記憶をリセットしました。次の接続から反映）'); };
+let toastTimer = 0;
+const toast = t => { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2600); };
+const pill = (text, cls = '') => { $('pillText').textContent = text; $('pill').className = 'glass ' + cls; };
 
-// ---------- three.js scene ----------
+// ================= 描画の土台 =================
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
-renderer.shadowMap.enabled = false; // Quest 2の負荷を下げるため影なし
 document.body.appendChild(renderer.domElement);
-document.body.appendChild(VRButton.createButton(renderer));
+navigator.xr?.isSessionSupported?.('immersive-vr').then(ok => { if (ok) document.body.appendChild(VRButton.createButton(renderer)); }).catch(() => {});
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xbfd9f2);
-scene.fog = new THREE.Fog(0xbfd9f2, 10, 30);
-const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
+scene.background = new THREE.Color(0x2a221c);
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.03, 60);
 camera.rotation.order = 'YXZ';
-camera.position.set(0, 1.6, 0);
-const player = new THREE.Group();
-player.position.set(0, 0, 0.6);
-player.add(camera);
-scene.add(player);
+const player = new THREE.Group(); player.position.set(0, 0, 0.95); player.add(camera); scene.add(player);
+camera.position.set(0, 1.24, 0);
 addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 1.1));
-const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
-sun.position.set(3, 6, 2); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
-Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 });
-scene.add(sun);
-
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
-const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 48), std(0x9cc58a));
-floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48), std(0xe8d9bd));
-rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.005, -1.2); rug.receiveShadow = true; scene.add(rug);
-// trees
-for (let i = 0; i < 14; i++) {
-  const a = i / 14 * Math.PI * 2, r = 7 + (i % 3);
-  const t = new THREE.Group();
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.2), std(0x7a5a3a)); trunk.position.y = 0.6;
-  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.0, 8), std(0x4f8f4a)); leaf.position.y = 2.0;
-  t.add(trunk, leaf); t.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); t.traverse(m => m.castShadow = true); scene.add(t);
-}
-// table
-const TABLE = { x: 1.3, z: -1.3, w: 1.2, d: 0.7, top: 0.74 };
-{
-  const g = new THREE.Group();
-  const top = new THREE.Mesh(new THREE.BoxGeometry(TABLE.w, 0.05, TABLE.d), std(0xb98a5a)); top.position.y = TABLE.top - 0.025;
-  g.add(top);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, TABLE.top - 0.05, 0.05), std(0x8a6440));
-    leg.position.set(sx * (TABLE.w / 2 - 0.05), (TABLE.top - 0.05) / 2, sz * (TABLE.d / 2 - 0.05)); g.add(leg);
-  }
-  g.position.set(TABLE.x, 0, TABLE.z); g.traverse(m => { m.castShadow = true; m.receiveShadow = true; }); scene.add(g);
-}
+const basic = c => new THREE.MeshBasicMaterial({ color: c });
+const canvasTex = (w, h, draw, rx = 1, ry = 1) => {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rx, ry); tx.anisotropy = 4; return tx;
+};
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const add = (geo, mat, x, y, z, parent = scene) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
 
-// ---------- items ----------
-const items = [];
-function addItem(name, mesh, r, pos, heavy = false) {
-  mesh.traverse(m => { m.castShadow = true; });
-  mesh.position.copy(pos); scene.add(mesh);
-  items.push({ name, mesh, r, heavy, held: null, vel: new THREE.Vector3(), last: pos.clone() });
-}
-addItem('赤いボール', new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 16), std(0xe0453a, { roughness: 0.4 })), 0.07, new THREE.Vector3(1.0, TABLE.top + 0.07, -1.3));
-addItem('青いキューブ', new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), std(0x3a6fe0)), 0.05, new THREE.Vector3(1.3, TABLE.top + 0.05, -1.4));
+// ================= カフェ =================
+const ROOM = { x0: -3.4, x1: 3.4, z0: -1.9, z1: 4.6, h: 3.0 };
+const lights = {};
 {
-  const cup = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.1, 20), std(0xf4f1ea, { roughness: 0.3 }));
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.008, 8, 16), std(0xf4f1ea, { roughness: 0.3 }));
-  handle.position.x = 0.052; cup.add(body, handle);
-  addItem('白いマグカップ', cup, 0.05, new THREE.Vector3(1.6, TABLE.top + 0.05, -1.2));
-}
-addItem('緑のボトル', new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 16), std(0x3aa564, { roughness: 0.2 })), 0.11, new THREE.Vector3(-1.2, 0.11, -0.6));
-addItem('大きな木箱', new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), std(0xa0753f)), 0.35, new THREE.Vector3(-1.6, 0.35, -2.2), true);
-const ITEM_NAMES = items.map(i => i.name);
-
-function onTable(p) { return Math.abs(p.x - TABLE.x) < TABLE.w / 2 && Math.abs(p.z - TABLE.z) < TABLE.d / 2; }
-const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
-function updateItems(dt) {
-  for (const it of items) {
-    const p = it.mesh.getWorldPosition(tmpV);
-    if (it.held) { it.vel.copy(p).sub(it.last).divideScalar(Math.max(dt, 1e-3)); it.last.copy(p); continue; }
-    it.vel.y -= 9.8 * dt;
-    it.mesh.position.addScaledVector(it.vel, dt);
-    const q = it.mesh.position;
-    const ground = (onTable(q) && it.last.y - it.r >= TABLE.top - 0.03) ? TABLE.top : 0;
-    if (q.y - it.r < ground) {
-      q.y = ground + it.r;
-      it.vel.y = Math.abs(it.vel.y) > 0.5 ? -it.vel.y * 0.3 : 0;
-      it.vel.x *= 0.85; it.vel.z *= 0.85;
-      if (it.vel.lengthSq() < 0.001) it.vel.set(0, 0, 0);
+  // 床：木のフローリング
+  const floorTex = canvasTex(512, 512, (g, w, h) => {
+    const rows = 8;
+    for (let r = 0; r < rows; r++) {
+      let x = -rnd() * 200;
+      while (x < w) {
+        const len = 160 + rnd() * 200, base = 90 + rnd() * 30;
+        g.fillStyle = `rgb(${base + 40},${base + 8},${base - 30})`; g.fillRect(x, r * h / rows, len, h / rows);
+        g.strokeStyle = 'rgba(40,24,12,.55)'; g.lineWidth = 2; g.strokeRect(x, r * h / rows, len, h / rows);
+        for (let k = 0; k < 6; k++) { g.strokeStyle = 'rgba(60,35,15,.12)'; g.beginPath(); const yy = r * h / rows + rnd() * h / rows; g.moveTo(x, yy); g.lineTo(x + len, yy + (rnd() - .5) * 6); g.stroke(); }
+        x += len;
+      }
     }
-    const R = 6; const d = Math.hypot(q.x, q.z); if (d > R) { q.x *= R / d; q.z *= R / d; it.vel.x = it.vel.z = 0; }
-    it.last.copy(q);
+  }, 5, 5);
+  const floor = add(new THREE.PlaneGeometry(ROOM.x1 - ROOM.x0, ROOM.z1 - ROOM.z0), std(0xffffff, { map: floorTex, roughness: 0.65 }), 0, 0, (ROOM.z0 + ROOM.z1) / 2);
+  floor.rotation.x = -Math.PI / 2;
+  const ceil = add(new THREE.PlaneGeometry(ROOM.x1 - ROOM.x0, ROOM.z1 - ROOM.z0), std(0x4a372a), 0, ROOM.h, (ROOM.z0 + ROOM.z1) / 2);
+  ceil.rotation.x = Math.PI / 2;
+  for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(ROOM.x1 - ROOM.x0, 0.12, 0.14), std(0x3a2a1f), 0, ROOM.h - 0.06, ROOM.z0 + 0.6 + i * 1.3); // 梁
+
+  // 壁：しっくい調
+  const plaster = std(0xece3d4, { roughness: 0.95 }), wainscot = std(0x6b4a33, { roughness: 0.7 });
+  const W = ROOM.x1 - ROOM.x0, D = ROOM.z1 - ROOM.z0;
+  const side = (x, rotY) => { const m = add(new THREE.PlaneGeometry(D, ROOM.h), plaster, x, ROOM.h / 2, (ROOM.z0 + ROOM.z1) / 2); m.rotation.y = rotY;
+    const w = add(new THREE.BoxGeometry(0.03, 0.9, D), wainscot, x + (rotY > 0 ? 0.015 : -0.015), 0.45, (ROOM.z0 + ROOM.z1) / 2); return m; };
+  side(ROOM.x0, Math.PI / 2); side(ROOM.x1, -Math.PI / 2);
+  const front = add(new THREE.PlaneGeometry(W, ROOM.h), plaster, 0, ROOM.h / 2, ROOM.z1); front.rotation.y = Math.PI;
+  // 奥の壁と大きな窓（窓：x -2.2〜2.2, y 0.75〜2.55）
+  const WIN = { x0: -2.2, x1: 2.2, y0: 0.75, y1: 2.55 };
+  const backZ = ROOM.z0;
+  add(new THREE.BoxGeometry(WIN.x0 - ROOM.x0, ROOM.h, 0.2), plaster, (ROOM.x0 + WIN.x0) / 2, ROOM.h / 2, backZ);
+  add(new THREE.BoxGeometry(ROOM.x1 - WIN.x1, ROOM.h, 0.2), plaster, (ROOM.x1 + WIN.x1) / 2, ROOM.h / 2, backZ);
+  add(new THREE.BoxGeometry(WIN.x1 - WIN.x0, WIN.y0, 0.2), wainscot, 0, WIN.y0 / 2, backZ);
+  add(new THREE.BoxGeometry(WIN.x1 - WIN.x0, ROOM.h - WIN.y1, 0.2), plaster, 0, (ROOM.h + WIN.y1) / 2, backZ);
+  const frameM = std(0x1d1d1f, { roughness: 0.4, metalness: 0.5 });
+  for (const x of [WIN.x0, -0.75, 0.75, WIN.x1]) add(new THREE.BoxGeometry(0.05, WIN.y1 - WIN.y0, 0.06), frameM, x, (WIN.y0 + WIN.y1) / 2, backZ + 0.05);
+  for (const y of [WIN.y0, 2.15, WIN.y1]) add(new THREE.BoxGeometry(WIN.x1 - WIN.x0, 0.05, 0.06), frameM, 0, y, backZ + 0.05);
+  add(new THREE.BoxGeometry(WIN.x1 - WIN.x0 + 0.1, 0.04, 0.26), std(0x7a5236, { roughness: 0.5 }), 0, WIN.y0, backZ + 0.12); // 窓台
+  const glass = add(new THREE.PlaneGeometry(WIN.x1 - WIN.x0, WIN.y1 - WIN.y0), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.08, roughness: 0.05, metalness: 0.2 }), 0, (WIN.y0 + WIN.y1) / 2, backZ + 0.02);
+
+  // 窓の外：街並み（時間帯で描き直す）
+  const streetCanvas = document.createElement('canvas'); streetCanvas.width = 1400; streetCanvas.height = 700;
+  const streetTex = new THREE.CanvasTexture(streetCanvas); streetTex.colorSpace = THREE.SRGBColorSpace;
+  const outside = add(new THREE.PlaneGeometry(12, 6), new THREE.MeshBasicMaterial({ map: streetTex }), 0, 1.75, backZ - 2.6);
+  lights.paintStreet = mode => {
+    const g = streetCanvas.getContext('2d'), w = streetCanvas.width, h = streetCanvas.height; seed = 42;
+    const P = {
+      day: { sky: ['#8ec1ec', '#d8ebf6'], bld: ['#c9c2b8', '#b7b1a8', '#d6d0c4', '#a9a49c'], win: 'rgba(120,150,175,.55)', lit: 0, road: '#77736d', walk: '#b8b0a3', tree: '#4f7d45', ink: '#2c2a28', glow: 0 },
+      evening: { sky: ['#5a6a9c', '#f3a874'], bld: ['#8a7a78', '#7a6c6c', '#9a8a84', '#6d6262'], win: 'rgba(90,90,110,.6)', lit: 0.35, road: '#5d5654', walk: '#8c8078', tree: '#3d5a3a', ink: '#24201f', glow: 0.5 },
+      night: { sky: ['#070b1c', '#1b2346'], bld: ['#22242e', '#1b1d26', '#2a2c36', '#181a22'], win: 'rgba(40,44,60,.8)', lit: 0.6, road: '#2a2a2e', walk: '#3a3836', tree: '#18241a', ink: '#0c0c10', glow: 1 },
+    }[mode];
+    const sg = g.createLinearGradient(0, 0, 0, h * 0.75); sg.addColorStop(0, P.sky[0]); sg.addColorStop(1, P.sky[1]); g.fillStyle = sg; g.fillRect(0, 0, w, h);
+    if (mode === 'night') { g.fillStyle = 'rgba(255,255,255,.6)'; for (let i = 0; i < 40; i++) g.fillRect(rnd() * w, rnd() * h * 0.35, 1.5, 1.5); }
+    // 奥のビル群
+    for (let layer = 0; layer < 2; layer++) {
+      let x = -40;
+      while (x < w) {
+        const bw = 90 + rnd() * 170, bh = (layer ? 220 : 300) + rnd() * (layer ? 160 : 240), top = h * 0.82 - bh;
+        g.fillStyle = P.bld[Math.floor(rnd() * P.bld.length)]; if (layer === 0) g.globalAlpha = 0.6; g.fillRect(x, top, bw, bh); g.globalAlpha = 1;
+        for (let wy = top + 16; wy < h * 0.8 - 20; wy += 30) for (let wx = x + 12; wx < x + bw - 16; wx += 24) {
+          g.fillStyle = rnd() < P.lit ? (rnd() < 0.5 ? '#ffd27f' : '#fff0c8') : P.win; g.fillRect(wx, wy, 13, 16);
+        }
+        if (layer && rnd() < 0.45) { // 小さな看板
+          const sx = x + 10 + rnd() * (bw - 70), sy = h * 0.6 + rnd() * 40, words = ['喫茶', '書店', '花', 'パン', '珈琲', '古着'];
+          g.fillStyle = ['#b8433a', '#2e5c8a', '#3d7a52', '#c7922e'][Math.floor(rnd() * 4)]; g.fillRect(sx, sy, 40, 74);
+          if (P.glow) { g.shadowColor = g.fillStyle; g.shadowBlur = 18 * P.glow; g.fillRect(sx, sy, 40, 74); g.shadowBlur = 0; }
+          g.fillStyle = '#fff'; g.font = 'bold 26px sans-serif'; const wd = words[Math.floor(rnd() * words.length)]; [...wd].forEach((c, i) => g.fillText(c, sx + 7, sy + 30 + i * 30));
+        }
+        x += bw + 6;
+      }
+    }
+    // 歩道・車道・横断歩道
+    g.fillStyle = P.walk; g.fillRect(0, h * 0.82, w, h * 0.06);
+    g.fillStyle = P.road; g.fillRect(0, h * 0.88, w, h * 0.12);
+    g.fillStyle = mode === 'night' ? 'rgba(220,220,220,.35)' : 'rgba(240,240,240,.85)'; for (let i = 0; i < 10; i++) g.fillRect(820 + i * 34, h * 0.9, 20, h * 0.1);
+    // 電柱と電線
+    g.strokeStyle = P.ink; g.lineWidth = 2;
+    g.fillStyle = P.ink; g.fillRect(1060, h * 0.18, 14, h * 0.66); g.fillRect(1030, h * 0.22, 74, 6);
+    for (const yy of [0.23, 0.26, 0.3]) { g.beginPath(); g.moveTo(0, h * (yy + 0.06)); g.quadraticCurveTo(530, h * (yy + 0.14), 1067, h * yy); g.quadraticCurveTo(1250, h * (yy + 0.05), w, h * (yy + 0.02)); g.stroke(); }
+    // 街路樹
+    g.fillStyle = P.ink; g.fillRect(330, h * 0.55, 14, h * 0.28);
+    g.fillStyle = P.tree; for (let i = 0; i < 9; i++) { g.beginPath(); g.arc(337 + (rnd() - .5) * 120, h * 0.48 + (rnd() - .5) * 90, 55 + rnd() * 25, 0, Math.PI * 2); g.fill(); }
+    // 街灯
+    for (const lx of [600, 1250]) {
+      g.fillStyle = P.ink; g.fillRect(lx, h * 0.5, 6, h * 0.33); g.fillRect(lx - 24, h * 0.5, 30, 5);
+      if (P.glow) { const rg = g.createRadialGradient(lx - 22, h * 0.51, 2, lx - 22, h * 0.51, 70); rg.addColorStop(0, `rgba(255,220,150,${0.9 * P.glow})`); rg.addColorStop(1, 'rgba(255,220,150,0)'); g.fillStyle = rg; g.fillRect(lx - 100, h * 0.51 - 80, 160, 160); }
+    }
+    streetTex.needsUpdate = true;
+  };
+
+  // 照明
+  lights.hemi = new THREE.HemisphereLight(0xfff6ea, 0x6b5240, 0.9); scene.add(lights.hemi);
+  lights.window = new THREE.DirectionalLight(0xeaf3ff, 1.1); lights.window.position.set(-0.5, 2.6, -4); lights.window.target.position.set(0.3, 0.6, 1); scene.add(lights.window, lights.window.target);
+  lights.pendants = [];
+  const shadeM = std(0x2b2b2b, { roughness: 0.5, metalness: 0.4, side: THREE.DoubleSide });
+  for (const [x, z, y] of [[0, 0, 1.95], [2.7, 1.2, 2.15], [2.7, 2.6, 2.15], [-1.9, 1.9, 2.1], [-1.9, 3.5, 2.1]]) {
+    add(new THREE.CylinderGeometry(0.004, 0.004, ROOM.h - y - 0.12), basic(0x111111), x, (ROOM.h + y) / 2 + 0.06, z);
+    add(new THREE.ConeGeometry(0.17, 0.16, 24, 1, true), shadeM, x, y, z);
+    const bulb = add(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff2d6, emissive: 0xffd9a0, emissiveIntensity: 1.5 }), x, y - 0.07, z);
+    const pl = new THREE.PointLight(0xffc98a, 0.8, 5.5, 1.6); pl.position.set(x, y - 0.12, z); scene.add(pl);
+    lights.pendants.push({ pl, bulb });
   }
-}
-function describeItem(it) {
-  const p = it.mesh.getWorldPosition(new THREE.Vector3());
-  let where = it.held === 'char' ? 'あなたが持っている' : it.held ? 'プレイヤーが持っている' : onTable(p) && p.y > TABLE.top ? 'テーブルの上' : '床の上';
-  const dist = p.distanceTo(chr.root.position).toFixed(1);
-  return `${it.name}（${where}、あなたから約${dist}m${it.heavy ? '、とても重い' : ''}）`;
+
+  // 自分たちのテーブル（丸テーブル）と椅子
+  const wood = std(0x8a5a38, { roughness: 0.55 }), dark = std(0x1f1b18, { roughness: 0.5, metalness: 0.3 });
+  add(new THREE.CylinderGeometry(0.4, 0.4, 0.035, 48), wood, 0, 0.715, 0);
+  add(new THREE.CylinderGeometry(0.03, 0.03, 0.7), dark, 0, 0.35, 0);
+  add(new THREE.CylinderGeometry(0.22, 0.24, 0.02, 32), dark, 0, 0.01, 0);
+  const chair = (x, z, rotY) => {
+    const c = new THREE.Group(); c.position.set(x, 0, z); c.rotation.y = rotY; scene.add(c);
+    add(new THREE.BoxGeometry(0.42, 0.04, 0.4), wood, 0, 0.45, 0, c);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.CylinderGeometry(0.016, 0.014, 0.45), wood, sx * 0.18, 0.225, sz * 0.17, c);
+    for (const sx of [-1, 1]) add(new THREE.CylinderGeometry(0.016, 0.016, 0.45), wood, sx * 0.18, 0.67, -0.18, c);
+    add(new THREE.BoxGeometry(0.4, 0.12, 0.025), wood, 0, 0.82, -0.18, c);
+    return c;
+  };
+  chair(0, -0.6, 0);
+  // 他の席
+  const smallTable = (x, z) => { add(new THREE.BoxGeometry(0.6, 0.035, 0.6), wood, x, 0.715, z); add(new THREE.CylinderGeometry(0.025, 0.025, 0.7), dark, x, 0.35, z); add(new THREE.BoxGeometry(0.36, 0.02, 0.36), dark, x, 0.01, z); chair(x, z - 0.5, 0); chair(x, z + 0.5, Math.PI); };
+  smallTable(-1.9, 1.9); smallTable(-1.9, 3.5);
+
+  // カウンターとエスプレッソマシン
+  add(new THREE.BoxGeometry(0.8, 1.0, 3.0), std(0x5c3d28, { roughness: 0.6 }), 2.95, 0.5, 1.9);
+  add(new THREE.BoxGeometry(0.95, 0.05, 3.1), std(0x2e2320, { roughness: 0.3 }), 2.88, 1.02, 1.9);
+  const chrome = std(0xc9ccd1, { metalness: 0.9, roughness: 0.25 });
+  add(new THREE.BoxGeometry(0.42, 0.38, 0.6), chrome, 3.05, 1.24, 1.2);
+  add(new THREE.BoxGeometry(0.1, 0.1, 0.5), dark, 2.86, 1.16, 1.2);
+  add(new THREE.CylinderGeometry(0.07, 0.07, 0.26, 20), dark, 3.05, 1.56, 1.45); // グラインダー
+  for (let i = 0; i < 6; i++) add(new THREE.CylinderGeometry(0.035, 0.03, 0.07, 14), std(0xf4f1ea, { roughness: 0.3 }), 2.8 + (i % 2) * 0.09, 1.08, 2.2 + Math.floor(i / 2) * 0.1);
+  for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.03, 0.03, 0.62), wood, 2.25, 0.31, 1.0 + i * 0.8); // スツール
+  for (let i = 0; i < 3; i++) add(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 20), std(0x2e2320), 2.25, 0.64, 1.0 + i * 0.8);
+
+  // 黒板メニュー
+  const menuTex = canvasTex(512, 640, (g, w, h) => {
+    g.fillStyle = '#243028'; g.fillRect(0, 0, w, h); g.strokeStyle = '#8a6a48'; g.lineWidth = 18; g.strokeRect(9, 9, w - 18, h - 18);
+    g.fillStyle = '#f2efe6'; g.font = '44px serif'; g.fillText('本日のメニュー', 80, 90);
+    g.font = '30px serif'; ['ブレンドコーヒー', 'カフェラテ', '紅茶（ダージリン）', 'ココア', '抹茶ラテ', 'クリームソーダ'].forEach((t, i) => g.fillText('・' + t, 60, 170 + i * 66));
+    g.fillStyle = '#e8c27a'; g.font = '26px serif'; g.fillText('ゆっくりしていってね', 120, 590);
+  });
+  const menu = add(new THREE.PlaneGeometry(0.8, 1.0), new THREE.MeshStandardMaterial({ map: menuTex, roughness: 0.9 }), ROOM.x1 - 0.02, 1.75, 1.9); menu.rotation.y = -Math.PI / 2;
+
+  // 本棚と観葉植物
+  const shelfM = std(0x6b4a33, { roughness: 0.6 });
+  for (const y of [1.15, 1.55, 1.95]) {
+    add(new THREE.BoxGeometry(0.28, 0.03, 2.2), shelfM, ROOM.x0 + 0.14, y, 1.0);
+    let z = 0.0;
+    while (z < 2.0) { const bw = 0.03 + rnd() * 0.03, bh = 0.2 + rnd() * 0.1; add(new THREE.BoxGeometry(0.2, bh, bw), std([0x8a3b2e, 0x2f4a6b, 0xc9b48a, 0x3e5e44, 0x9a7a5a, 0xe2dccd][Math.floor(rnd() * 6)]), ROOM.x0 + 0.15, y + 0.015 + bh / 2, z); z += bw + 0.005 + (rnd() < 0.1 ? 0.15 : 0); }
+  }
+  const plant = (x, z, s = 1) => {
+    add(new THREE.CylinderGeometry(0.16 * s, 0.12 * s, 0.34 * s, 20), std(0xd8cfc0, { roughness: 0.6 }), x, 0.17 * s, z);
+    const leafM = std(0x456b3d, { roughness: 0.7 });
+    for (let i = 0; i < 9; i++) add(new THREE.SphereGeometry((0.13 + rnd() * 0.08) * s, 10, 8), leafM, x + (rnd() - .5) * 0.35 * s, (0.5 + rnd() * 0.75) * s, z + (rnd() - .5) * 0.35 * s);
+  };
+  plant(-2.75, -1.45, 1.3); plant(2.75, -1.45, 1.2); plant(-3.0, 4.1, 1.1);
+  for (const x of [-1.4, 1.4]) { // 窓台の小さな鉢
+    add(new THREE.CylinderGeometry(0.05, 0.04, 0.08, 14), std(0xb5704a), x, WIN.y0 + 0.06, backZ + 0.13);
+    add(new THREE.SphereGeometry(0.07, 10, 8), std(0x5b8a4a), x, WIN.y0 + 0.15, backZ + 0.13);
+  }
 }
 
-// ---------- character (original design built from primitives) ----------
-const chr = { state: 'idle', target: null, onArrive: null, holding: null, offering: false, offerT: 0,
-  expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, walkPhase: 0, lean: 0, lastTouch: 0 };
+// ================= 時間帯 =================
+let timeMode = 'day';
+function autoTime() { const h = new Date().getHours() + new Date().getMinutes() / 60; return h >= 6 && h < 16 ? 'day' : h >= 16 && h < 18.5 ? 'evening' : 'night'; }
+const TIME_JA = { day: '昼', evening: '夕方', night: '夜' };
+function applyTime(mode, announce) {
+  timeMode = mode; lights.paintStreet(mode);
+  const L = { day: [0xfff6ea, 0.95, 0xeaf3ff, 1.2, 0.5, 0x2a221c], evening: [0xffd9b5, 0.62, 0xffa86a, 0.85, 1.1, 0x1e1712], night: [0xffe2c4, 0.32, 0x8090c0, 0.12, 1.7, 0x120e0b] }[mode];
+  lights.hemi.color.setHex(L[0]); lights.hemi.intensity = L[1]; lights.window.color.setHex(L[2]); lights.window.intensity = L[3];
+  for (const p of lights.pendants) { p.pl.intensity = L[4]; p.bulb.material.emissiveIntensity = 0.8 + L[4]; }
+  scene.background.setHex(L[5]);
+  if (announce) live.sendText(`（時間がたって、窓の外は${TIME_JA[mode]}になった）`);
+}
+const pickTime = () => $('timeSel').value === 'auto' ? autoTime() : $('timeSel').value;
+applyTime(pickTime(), false);
+$('timeSel').onchange = () => { store.set('time', $('timeSel').value); const m = pickTime(); if (m !== timeMode) applyTime(m, true); };
+{ const t = store.get('time', 'auto'); $('timeSel').value = t; applyTime(pickTime(), false); }
+setInterval(() => { if ($('timeSel').value === 'auto') { const m = autoTime(); if (m !== timeMode) applyTime(m, true); } }, 60000);
+
+// ================= 飲み物 =================
+const DRINKS = {
+  'ブレンドコーヒー': { liquid: 0x3b2416, kind: 'cup', note: 'ホットのブレンド' },
+  'カフェラテ': { liquid: 0xc8a27a, foam: 0xf3e8d8, kind: 'cup', note: 'ミルクたっぷり' },
+  '紅茶': { liquid: 0x9a4a1e, kind: 'cup', note: 'ダージリン' },
+  'ココア': { liquid: 0x5a3322, foam: 0xe9d6c2, kind: 'mug', note: '甘くてあたたかい' },
+  '抹茶ラテ': { liquid: 0x8fae5a, foam: 0xe8efd8, kind: 'mug', note: 'ほろ苦い' },
+  'クリームソーダ': { liquid: 0x3fc46a, kind: 'soda', note: 'メロンにアイスとさくらんぼ' },
+};
+const DRINK_NAMES = Object.keys(DRINKS);
+const TABLE_TOP = 0.735;
+const SPOTS = { mina: new THREE.Vector3(-0.14, TABLE_TOP, -0.2), player: new THREE.Vector3(0.16, TABLE_TOP, 0.12) };
+const drinks = { mina: null, player: null };
+function makeDrink(name) {
+  const d = DRINKS[name], g = new THREE.Group();
+  const china = std(0xf6f2ea, { roughness: 0.25 }), glassM = new THREE.MeshStandardMaterial({ color: 0xe8f4f0, transparent: true, opacity: 0.35, roughness: 0.05 });
+  let liquid, h;
+  if (d.kind === 'soda') {
+    h = 0.17; add(new THREE.CylinderGeometry(0.038, 0.03, h, 20, 1, true), glassM, 0, h / 2, 0, g);
+    liquid = add(new THREE.CylinderGeometry(0.035, 0.028, h * 0.8, 20), new THREE.MeshStandardMaterial({ color: d.liquid, transparent: true, opacity: 0.85, roughness: 0.1 }), 0, h * 0.4, 0, g);
+    add(new THREE.SphereGeometry(0.033, 14, 10), std(0xfaf6ec, { roughness: 0.6 }), 0, h * 0.86, 0, g);
+    add(new THREE.SphereGeometry(0.011, 10, 8), std(0xc8102e, { roughness: 0.2 }), 0.01, h * 0.86 + 0.032, 0, g);
+    add(new THREE.CylinderGeometry(0.004, 0.004, 0.22), std(0xe85a6a), -0.018, h * 0.75, 0.01, g).rotation.z = 0.25;
+    liquid.userData = { full: h * 0.8, base: 0 };
+  } else {
+    const r = d.kind === 'mug' ? 0.042 : 0.04; h = d.kind === 'mug' ? 0.095 : 0.065;
+    if (d.kind === 'cup') { add(new THREE.CylinderGeometry(0.075, 0.07, 0.01, 28), china, 0, 0.005, 0, g); }
+    add(new THREE.CylinderGeometry(r, r * 0.85, h, 24, 1, true), china, 0, h / 2 + 0.01, 0, g).material.side = THREE.DoubleSide;
+    add(new THREE.CylinderGeometry(r * 0.85, r * 0.85, 0.004, 24), china, 0, 0.012, 0, g);
+    const handle = add(new THREE.TorusGeometry(0.02, 0.006, 8, 14), china, r + 0.012, h / 2 + 0.01, 0, g);
+    liquid = add(new THREE.CylinderGeometry(r * 0.95, r * 0.85, 0.004, 24), std(d.foam || d.liquid, { roughness: 0.3 }), 0, h * 0.85, 0, g);
+    liquid.userData = { full: h * 0.85, base: 0.02 };
+    if (d.foam && name === 'カフェラテ') { const art = add(new THREE.CircleGeometry(r * 0.45, 20), basic(0xc8a27a), 0, 0.003, 0, liquid); art.rotation.x = -Math.PI / 2; }
+  }
+  g.userData = { name, liquid, level: 1 };
+  return g;
+}
+function setLevel(dr, level) {
+  dr.userData.level = Math.max(0, level);
+  const L = dr.userData.liquid, u = L.userData;
+  if (DRINKS[dr.userData.name].kind === 'soda') { L.scale.y = Math.max(0.02, dr.userData.level); L.position.y = u.full * L.scale.y / 2; }
+  else L.position.y = u.base + (u.full - u.base) * dr.userData.level;
+  L.visible = dr.userData.level > 0.01;
+}
+const deliveries = [];
+function deliver(who, name, delay = 3.5) {
+  if (!DRINKS[name]) name = DRINK_NAMES.find(n => n.includes(name) || name.includes(n)) || 'ブレンドコーヒー';
+  deliveries.push({ who, name, t: delay });
+  return name;
+}
+function placeDrink(who, name) {
+  if (drinks[who]) { if (chr.holdingCup === drinks[who]) chr.holdingCup = null; drinks[who].removeFromParent(); }
+  const dr = makeDrink(name); dr.position.copy(SPOTS[who]); dr.scale.setScalar(0.01); dr.userData.grow = 0; scene.add(dr); drinks[who] = dr;
+  chime();
+  return dr;
+}
+
+// ================= ミナ（オリジナルデザイン・着席） =================
+const chr = { expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, lean: 0, lastTouch: 0, holdingCup: null, sipT: 0, lookOutT: 0, idleT: 20 };
 {
-  // 24歳・落ち着いた大人の女性（オリジナルデザイン）：色白、黒のボブ、黒いレースのハイネック＋花柄のミディスカート
-  const canvasTex = (w, h, draw, rx = 1, ry = 1) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
-    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rx, ry); return tx; };
   const flower = (g, x, y, r, petal, center, n = 5) => { g.fillStyle = petal; for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.5, r * 0.28, a, 0, Math.PI * 2); g.fill(); } g.fillStyle = center; g.beginPath(); g.arc(x, y, r * 0.25, 0, Math.PI * 2); g.fill(); };
-  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const laseDraw = (base, pattern) => (g, w, h) => { g.fillStyle = base; g.fillRect(0, 0, w, h); for (let i = 0; i < 40; i++) flower(g, rnd() * w, rnd() * h, 10 + rnd() * 12, pattern, base, 6); g.strokeStyle = pattern; g.lineWidth = 1; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(rnd() * w, rnd() * h, 4 + rnd() * 8, 0, Math.PI * 2); g.stroke(); } };
-  const laceTex = canvasTex(256, 256, laseDraw('#141217', '#2b2730'), 2, 2);
-  const sleeveTex = canvasTex(256, 256, laseDraw('#5a4644', '#141217'), 1, 2); // 袖は肌が少し透けるレース
+  const lace = (base, pattern) => (g, w, h) => { g.fillStyle = base; g.fillRect(0, 0, w, h); for (let i = 0; i < 40; i++) flower(g, rnd() * w, rnd() * h, 10 + rnd() * 12, pattern, base, 6); g.strokeStyle = pattern; g.lineWidth = 1; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(rnd() * w, rnd() * h, 4 + rnd() * 8, 0, Math.PI * 2); g.stroke(); } };
+  const laceTex = canvasTex(256, 256, lace('#141217', '#2b2730'), 2, 2), sleeveTex = canvasTex(256, 256, lace('#5a4644', '#141217'), 1, 2);
   const skirtTex = canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#2d8a8c'; g.fillRect(0, 0, w, h); for (let i = 0; i < 70; i++) flower(g, rnd() * w, rnd() * h, 9 + rnd() * 9, rnd() < 0.8 ? '#f4efe6' : '#e9b9c0', rnd() < 0.5 ? '#c0392b' : '#e0a030'); }, 3, 1);
-  const skin = std(0xfcece4, { roughness: 0.55, emissive: 0xfcece4, emissiveIntensity: 0.32 }), hairM = std(0x101017, { roughness: 0.35, side: THREE.DoubleSide }); // 黒髪
-  const cloth = new THREE.MeshStandardMaterial({ map: laceTex, roughness: 0.8, emissive: 0xffffff, emissiveMap: laceTex, emissiveIntensity: 0.25 });
-  const sleeve = new THREE.MeshStandardMaterial({ map: sleeveTex, roughness: 0.8, emissive: 0xffffff, emissiveMap: sleeveTex, emissiveIntensity: 0.25 });
-  const skirtM = new THREE.MeshStandardMaterial({ map: skirtTex, roughness: 0.85, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: skirtTex, emissiveIntensity: 0.18 });
+  const skin = std(0xfcece4, { roughness: 0.55, emissive: 0xfcece4, emissiveIntensity: 0.28 }), hairM = std(0x121219, { roughness: 0.55, side: THREE.DoubleSide });
+  const texMat = (map, ei, o = {}) => new THREE.MeshStandardMaterial({ map, roughness: 0.8, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: ei, ...o });
+  const cloth = texMat(laceTex, 0.22), sleeve = texMat(sleeveTex, 0.22), skirtM = texMat(skirtTex, 0.16, { side: THREE.DoubleSide });
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  // 座った下半身
+  const HIP = 0.48;
   for (const sx of [-1, 1]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.04, 0.8), skin); leg.position.set(sx * 0.065, 0.4, 0); body.add(leg);
-    const shoe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 })); shoe.rotation.x = Math.PI / 2; shoe.position.set(sx * 0.065, 0.035, 0.03); body.add(shoe);
+    const thigh = add(new THREE.CylinderGeometry(0.055, 0.048, 0.42, 12), skin, sx * 0.075, HIP, 0.2, body); thigh.rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.044, 0.036, 0.46, 12), skin, sx * 0.075, 0.25, 0.4, body);
+    const shoe = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.43, body); shoe.rotation.x = Math.PI / 2;
   }
-  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.29, 0.62, 32, 1, true), skirtM); skirt.position.y = 0.66; body.add(skirt); // ミディ丈
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.34, 8, 20), cloth); torso.position.y = 1.15; torso.scale.set(1.05, 1, 0.82); body.add(torso);
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.06, 0.1, 20), cloth); collar.position.y = 1.46; body.add(collar); // ハイネック
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.04, 0.14), skin); neck.position.y = 1.48; body.add(neck);
+  const lap = add(new THREE.CylinderGeometry(0.21, 0.16, 0.46, 28, 1, true), skirtM, 0, HIP + 0.02, 0.19, body); lap.rotation.x = Math.PI / 2; // ひざの上のスカート
+  add(new THREE.CylinderGeometry(0.2, 0.235, 0.26, 28, 1, true), skirtM, 0, HIP - 0.13, 0.36, body); // ひざから下に落ちる布
+  const torso = add(new THREE.CapsuleGeometry(0.125, 0.32, 8, 20), cloth, 0, HIP + 0.3, 0, body); torso.scale.set(1.05, 1, 0.82);
+  add(new THREE.CylinderGeometry(0.046, 0.06, 0.1, 20), cloth, 0, HIP + 0.6, 0, body); // ハイネック
+  add(new THREE.CylinderGeometry(0.037, 0.04, 0.12), skin, 0, HIP + 0.64, 0, body);
   const arms = [];
-  for (const sx of [-1, 1]) { // sx=-1 is character's right (faces +Z)
-    const pivot = new THREE.Group(); pivot.position.set(sx * 0.155, 1.37, 0);
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), cloth); pivot.add(shoulder); // 肩でつなぐ
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.036, 0.5, 14), sleeve); arm.position.y = -0.25; pivot.add(arm);
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.01, 6, 14), cloth); cuff.rotation.x = Math.PI / 2; cuff.position.y = -0.49; pivot.add(cuff);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), skin); hand.scale.set(0.8, 1.25, 0.6); hand.position.y = -0.54; pivot.add(hand);
-    pivot.userData.hand = hand; body.add(pivot); arms.push(pivot);
+  for (const sx of [-1, 1]) { // sx=-1 が彼女の右手（+Z向き）
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.155, HIP + 0.52, 0);
+    add(new THREE.SphereGeometry(0.046, 16, 12), cloth, 0, 0, 0, pivot);
+    add(new THREE.CylinderGeometry(0.037, 0.03, 0.5, 14), sleeve, 0, -0.25, 0, pivot);
+    add(new THREE.TorusGeometry(0.03, 0.009, 6, 14), cloth, 0, -0.49, 0, pivot).rotation.x = Math.PI / 2;
+    const hand = add(new THREE.SphereGeometry(0.034, 14, 10), skin, 0, -0.54, 0, pivot); hand.scale.set(0.8, 1.25, 0.6);
+    pivot.userData.hand = hand; pivot.userData.side = sx; body.add(pivot); arms.push(pivot);
   }
-  const headPivot = new THREE.Group(); headPivot.position.y = 1.53; body.add(headPivot);
+  const headPivot = new THREE.Group(); headPivot.position.y = HIP + 0.68; body.add(headPivot);
   const head = new THREE.Group(); head.position.y = 0.12; head.scale.setScalar(0.93); headPivot.add(head);
-  head.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 24), skin));
-  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.41), hairM); hairTop.position.y = 0.01; head.add(hairTop);
-  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 16, Math.PI * 0.92, Math.PI * 1.16, 0, Math.PI * 0.74), hairM); hairBack.scale.set(1.06, 1.02, 1.06); hairBack.position.y = -0.005; head.add(hairBack); // あご丈のボブ
-  for (const sx of [-1, 1]) { const side = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.12, 4, 10), hairM); side.scale.set(0.55, 1, 1.5); side.position.set(sx * 0.158, -0.045, 0.04); side.rotation.z = sx * -0.08; head.add(side); }
-  // ---- face: 白目＋虹彩＋瞳孔＋ハイライト、笑い目、眉、頬、口の形 ----
-  const basic = c => new THREE.MeshBasicMaterial({ color: c });
+  add(new THREE.SphereGeometry(0.16, 32, 24), skin, 0, 0, 0, head);
+  add(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.41), hairM, 0, 0.01, 0, head);
+  const hairBack = add(new THREE.SphereGeometry(0.178, 40, 18, Math.PI * 0.8, Math.PI * 1.4, 0, Math.PI * 0.74), hairM, 0, -0.005, -0.005, head); hairBack.scale.set(1.07, 1.02, 1.05);
+  // 顔
   const whiteM = basic(0xfdfcfa), irisM = basic(0x22160f), pupilM = basic(0x120a08), lineM = basic(0x2a1d22);
   const eyes = [], irises = [], smileEyes = [], brows = [], blush = [], blushLines = [];
   for (const sx of [-1, 1]) {
     const eye = new THREE.Group(); eye.position.set(sx * 0.056, -0.008, 0.143); eye.rotation.set(0, sx * 0.33, sx * 0.08); head.add(eye); eyes.push(eye);
-    const white = new THREE.Mesh(new THREE.SphereGeometry(0.031, 20, 14), whiteM); white.scale.set(1.12, 0.82, 0.32); eye.add(white);
+    add(new THREE.SphereGeometry(0.031, 20, 14), whiteM, 0, 0, 0, eye).scale.set(1.12, 0.82, 0.32);
     const iris = new THREE.Group(); iris.position.z = 0.006; eye.add(iris); irises.push(iris);
-    const ir = new THREE.Mesh(new THREE.SphereGeometry(0.02, 18, 12), irisM); ir.scale.set(0.88, 0.98, 0.3); iris.add(ir);
-    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 12, 8), pupilM); pu.scale.set(1, 1.1, 0.3); pu.position.z = 0.003; iris.add(pu);
-    const hl1 = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), whiteM); hl1.position.set(0.006, 0.009, 0.007); iris.add(hl1);
-    const hl2 = new THREE.Mesh(new THREE.SphereGeometry(0.0028, 8, 6), whiteM); hl2.position.set(-0.006, -0.008, 0.007); iris.add(hl2);
-    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0048, 6, 20, Math.PI * 0.8), lineM); lash.rotation.z = Math.PI * 0.08; lash.scale.set(1.15, 0.85, 1); lash.position.z = 0.009; eye.add(lash);
-    // 笑い目「^」
-    const se = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0035, 6, 20, Math.PI), lineM); se.scale.set(1, 0.7, 1); se.position.copy(eye.position); se.position.y -= 0.006; se.position.z = 0.153; se.rotation.y = sx * 0.33; se.visible = false; head.add(se); smileEyes.push(se);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.005, 0.01), lineM); b.position.set(sx * 0.058, 0.044, 0.152); b.rotation.y = sx * 0.33; head.add(b); brows.push(b);
-    const bl = new THREE.Mesh(new THREE.CircleGeometry(0.026, 20), new THREE.MeshBasicMaterial({ color: 0xf3a0ae, transparent: true, opacity: 0, depthWrite: false }));
-    bl.position.set(sx * 0.088, -0.048, 0.132); bl.rotation.y = sx * 0.6; bl.scale.set(1.25, 0.8, 1); head.add(bl); blush.push(bl);
-    for (let k = 0; k < 3; k++) { // 照れ線
-      const ln = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.016, 0.002), new THREE.MeshBasicMaterial({ color: 0xe0506e, transparent: true, opacity: 0 }));
-      ln.position.set(sx * (0.077 + k * 0.011), -0.046, 0.137 - k * 0.004); ln.rotation.set(0, sx * 0.6, -0.5); head.add(ln); blushLines.push(ln);
-    }
+    add(new THREE.SphereGeometry(0.02, 18, 12), irisM, 0, 0, 0, iris).scale.set(0.88, 0.98, 0.3);
+    add(new THREE.SphereGeometry(0.0095, 12, 8), pupilM, 0, 0, 0.003, iris).scale.set(1, 1.1, 0.3);
+    add(new THREE.SphereGeometry(0.0055, 8, 6), whiteM, 0.006, 0.009, 0.007, iris);
+    add(new THREE.SphereGeometry(0.0028, 8, 6), whiteM, -0.006, -0.008, 0.007, iris);
+    const lash = add(new THREE.TorusGeometry(0.03, 0.0048, 6, 20, Math.PI * 0.8), lineM, 0, 0, 0.009, eye); lash.rotation.z = Math.PI * 0.08; lash.scale.set(1.15, 0.85, 1);
+    const se = add(new THREE.TorusGeometry(0.024, 0.0035, 6, 20, Math.PI), lineM, eye.position.x, eye.position.y - 0.006, 0.153, head); se.scale.set(1, 0.7, 1); se.rotation.y = sx * 0.33; se.visible = false; smileEyes.push(se);
+    const b = add(new THREE.BoxGeometry(0.044, 0.005, 0.01), lineM, sx * 0.058, 0.044, 0.152, head); b.rotation.y = sx * 0.33; brows.push(b);
+    const bl = add(new THREE.CircleGeometry(0.026, 20), new THREE.MeshBasicMaterial({ color: 0xf3a0ae, transparent: true, opacity: 0, depthWrite: false }), sx * 0.088, -0.048, 0.132, head); bl.rotation.y = sx * 0.6; bl.scale.set(1.25, 0.8, 1); blush.push(bl);
+    for (let k = 0; k < 3; k++) { const ln = add(new THREE.BoxGeometry(0.0035, 0.016, 0.002), new THREE.MeshBasicMaterial({ color: 0xe0506e, transparent: true, opacity: 0 }), sx * (0.077 + k * 0.011), -0.046, 0.137 - k * 0.004, head); ln.rotation.set(0, sx * 0.6, -0.5); blushLines.push(ln); }
   }
-  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), basic(0xb83a46)); // 話している時の口
-  mouth.position.set(0, -0.08, 0.146); mouth.scale.set(0.85, 0.15, 0.35); head.add(mouth);
-  const smileMouth = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0042, 6, 20, Math.PI), basic(0xc8505a)); smileMouth.rotation.z = Math.PI; smileMouth.position.set(0, -0.068, 0.15); head.add(smileMouth);
-  const frownMouth = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0035, 6, 20, Math.PI), lineM); frownMouth.position.set(0, -0.088, 0.148); frownMouth.visible = false; head.add(frownMouth);
-  const mole = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 8, 6), basic(0x3a2622)); mole.position.set(0.034, -0.104, 0.118); head.add(mole); // 口元のほくろ
-  for (const sx of [-1, 1]) { const ear = new THREE.Mesh(new THREE.OctahedronGeometry(0.011), std(0xd8dde4, { metalness: 0.9, roughness: 0.2 })); ear.position.set(sx * 0.15, -0.075, 0.0); head.add(ear); } // 小さなピアス
-  // speech bubble
-  const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 1024; bubbleCanvas.height = 320;
-  const bubbleTex = new THREE.CanvasTexture(bubbleCanvas); bubbleTex.colorSpace = THREE.SRGBColorSpace;
-  const bubble = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.25), new THREE.MeshBasicMaterial({ map: bubbleTex, transparent: true, depthWrite: false }));
-  bubble.position.y = 2.0; root.add(bubble);
-  root.traverse(m => { if (m.isMesh && m !== bubble) m.castShadow = true; });
-  root.position.set(0, 0, -2.2);
+  const mouth = add(new THREE.SphereGeometry(0.028, 16, 12), basic(0xb83a46), 0, -0.08, 0.146, head); mouth.scale.set(0.85, 0.15, 0.35);
+  const smileMouth = add(new THREE.TorusGeometry(0.016, 0.0042, 6, 20, Math.PI), basic(0xc8505a), 0, -0.068, 0.15, head); smileMouth.rotation.z = Math.PI;
+  const frownMouth = add(new THREE.TorusGeometry(0.014, 0.0035, 6, 20, Math.PI), lineM, 0, -0.088, 0.148, head); frownMouth.visible = false;
+  add(new THREE.SphereGeometry(0.0032, 8, 6), basic(0x3a2622), 0.034, -0.104, 0.118, head); // ほくろ
+  for (const sx of [-1, 1]) add(new THREE.OctahedronGeometry(0.011), std(0xd8dde4, { metalness: 0.9, roughness: 0.2 }), sx * 0.15, -0.075, 0, head);
+  root.position.set(0, 0, -0.58);
   scene.add(root);
-  Object.assign(chr, { root, body, torso, arms, headPivot, head, eyes, irises, smileEyes, brows, blush, blushLines, mouth, smileMouth, frownMouth, bubble, bubbleCanvas, bubbleTex,
+  Object.assign(chr, { root, body, torso, arms, headPivot, head, eyes, irises, smileEyes, brows, blush, blushLines, mouth, smileMouth, frownMouth,
     blushLevel: 0, patting: false, patTime: 0, patIdle: 9, patLast: 0, gaze: new THREE.Vector2(), gazeT: 1, gazeTarget: new THREE.Vector2(), tilt: 0 });
-}
-let bubbleText = '', userText = '', bubbleClearAt = 0, connState = '未接続';
-function drawBubble() {
-  chr.bubble.visible = false; return; // 吹き出しは表示しない（会話テンポ優先）
-  const c = chr.bubbleCanvas, g = c.getContext('2d');
-  g.clearRect(0, 0, c.width, c.height);
-  const lines = [];
-  const text = bubbleText || (connState !== '会話中' ? `（${connState}）` : '');
-  if (!text && !userText) { chr.bubbleTex.needsUpdate = true; chr.bubble.visible = false; return; }
-  chr.bubble.visible = true;
-  g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.roundRect(8, 8, c.width - 16, c.height - 16, 40); g.fill();
-  g.fillStyle = '#7a7f8c'; g.font = '30px sans-serif';
-  if (userText) g.fillText(('あなた：' + userText).slice(-34), 40, 56);
-  g.fillStyle = '#1d2030'; g.font = 'bold 44px sans-serif';
-  let line = '';
-  const t = text.slice(-120);
-  for (const ch of t) { if (g.measureText(line + ch).width > c.width - 90) { lines.push(line); line = ch; } else line += ch; }
-  lines.push(line);
-  lines.slice(-4).forEach((l, i) => g.fillText(l, 44, 118 + i * 56));
-  chr.bubbleTex.needsUpdate = true;
-}
-drawBubble();
-
-// ---------- character behaviours ----------
-const playerFloorPos = () => { const p = camera.getWorldPosition(new THREE.Vector3()); p.y = 0; return p; };
-function walkTo(p, cb) { chr.target = p.clone(); chr.target.y = 0; chr.onArrive = cb || null; chr.state = 'walk'; }
-function spotNear(targetPos, dist) {
-  const from = chr.root.position.clone(); const dir = from.sub(targetPos); dir.y = 0;
-  if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1);
-  return targetPos.clone().add(dir.normalize().multiplyScalar(dist));
 }
 function setExpression(e, sec = 6) { chr.expr = e; chr.exprT = sec; }
 function startGesture(g) { chr.gesture = g; chr.gestureT = 0; }
-function findItem(name) {
-  return items.find(i => i.name === name) || items.find(i => name && (i.name.includes(name) || name.includes(i.name.replace(/^.+の|^.+い/, ''))));
-}
-function releaseHeld(dropVel) {
-  const it = chr.holding; if (!it) return;
-  scene.attach(it.mesh); it.held = null; it.vel.copy(dropVel || new THREE.Vector3()); it.last.copy(it.mesh.position);
-  chr.holding = null; chr.offering = false;
+const ARM_LEN = 0.54, DOWN = new THREE.Vector3(0, -1, 0);
+// 腕を目標の位置へ伸ばす（届かない分は腕を縮めて曲げているように見せる）
+function reachTo(arm, worldPos, k) {
+  const local = chr.body.worldToLocal(worldPos.clone()).sub(arm.position), d = local.length();
+  arm.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(DOWN, local.normalize()), k);
+  arm.scale.y += (THREE.MathUtils.clamp(d / ARM_LEN, 0.45, 1.05) - arm.scale.y) * k;
 }
 
-function startHandHold(grip, armIdx) {
-  chr.handHold = { grip, armIdx, walked: 0 };
-  chr.state = 'idle'; chr.onArrive = null; chr.gesture = null;
-  setExpression('shy', 8);
-  live.sendText('（プレイヤーがあなたの手を握った）');
-}
-function endHandHold() {
-  const h = chr.handHold; if (!h) return;
-  chr.handHold = null; setExpression('happy', 5);
-  live.sendText(h.walked > 1.5 ? `（プレイヤーと手をつないで${Math.round(h.walked)}mほど一緒に歩いてから、手を離した）` : '（プレイヤーがつないでいた手をそっと離した）');
+// ================= ミナができること =================
+function sip() {
+  const dr = drinks.mina; if (!dr || dr.userData.level <= 0.02 || chr.sipT > 0) return false;
+  chr.sipT = 3.2; chr.holdingCup = dr; return true;
 }
 const tools = {
-  bring_item({ item }) {
-    if (chr.handHold) return { ok: false, reason: '今はプレイヤーと手をつないでいる' };
-    const it = findItem(item);
-    if (!it) return { ok: false, reason: `「${item}」は見当たらない。あるのは: ${ITEM_NAMES.join('、')}` };
-    if (it.heavy) { startGesture('shake'); return { ok: false, reason: `${it.name}は重すぎて一人では運べない` }; }
-    if (it.held && it.held !== 'char') return { ok: false, reason: 'それはもうプレイヤーが持っている' };
-    if (chr.holding && chr.holding !== it) releaseHeld();
-    const p = it.mesh.getWorldPosition(new THREE.Vector3());
-    walkTo(spotNear(p, 0.35), () => {
-      if (it.held && it.held !== 'char') return;
-      chr.root.lookAt(p.x, 0, p.z);
-      const hand = chr.arms[0].userData.hand;
-      hand.attach(it.mesh); it.mesh.position.set(0, -it.r - 0.02, 0); it.held = 'char'; chr.holding = it;
-      walkTo(spotNear(playerFloorPos(), 0.75), () => { chr.offering = true; chr.offerT = 15; });
-    });
-    return { ok: true, status: `${it.name}を取りに歩き出した。手渡すまで少し時間がかかる` };
+  order_drink({ drink, for_whom }) {
+    const who = for_whom === 'player' ? ['player'] : for_whom === 'both' ? ['mina', 'player'] : ['mina'];
+    const got = who.map(w => deliver(w, drink || 'ブレンドコーヒー'));
+    return { ok: true, status: `${got[0]}を注文した。少ししたら店員さんが運んでくる` };
   },
-  come_here() { if (chr.handHold) return { ok: true, note: 'もう手をつないで隣にいる' }; walkTo(spotNear(playerFloorPos(), 0.9)); return { ok: true }; },
-  go_to_item({ item }) {
-    if (chr.handHold) return { ok: false, reason: '今はプレイヤーと手をつないでいる' };
-    const it = findItem(item); if (!it) return { ok: false, reason: '見当たらない' };
-    walkTo(spotNear(it.mesh.getWorldPosition(new THREE.Vector3()), 0.5)); return { ok: true };
+  sip_drink() {
+    if (!drinks.mina) return { ok: false, reason: 'まだ飲み物がない' };
+    if (drinks.mina.userData.level <= 0.02) return { ok: false, reason: 'もう飲み終わっている' };
+    sip(); return { ok: true, left: Math.round(drinks.mina.userData.level * 100) + '%' };
   },
-  put_down() { if (!chr.holding) return { ok: false, reason: '何も持っていない' }; releaseHeld(); return { ok: true }; },
+  look_outside() { chr.lookOutT = 3.5; return { ok: true, outside: `${TIME_JA[timeMode]}の街並み。電線と街路樹、向かいにビルと小さな看板が見える` }; },
   gesture({ type }) { startGesture(type); return { ok: true }; },
   set_expression({ emotion }) { setExpression(emotion); return { ok: true }; },
-  look_around() { return { items: items.map(describeItem), player_distance_m: +chr.root.position.distanceTo(playerFloorPos()).toFixed(1) }; },
 };
+const TOOL_NAMES = Object.keys(tools);
 const toolDecls = [
-  { name: 'bring_item', description: 'プレイヤーに頼まれた物を歩いて取りに行き、プレイヤーの所まで持ってきて手渡す。', parameters: { type: 'OBJECT', properties: { item: { type: 'STRING', enum: ITEM_NAMES } }, required: ['item'] } },
-  { name: 'come_here', description: 'プレイヤーの近くまで歩いていく。' },
-  { name: 'go_to_item', description: '指定した物のそばまで歩いていく（持ちはしない）。', parameters: { type: 'OBJECT', properties: { item: { type: 'STRING', enum: ITEM_NAMES } }, required: ['item'] } },
-  { name: 'put_down', description: '手に持っている物をその場に置く。' },
-  { name: 'gesture', description: '身振りをする。', parameters: { type: 'OBJECT', properties: { type: { type: 'STRING', enum: ['wave', 'nod', 'shake', 'jump', 'spin'] } }, required: ['type'] } },
+  { name: 'order_drink', description: 'カフェで飲み物を注文する。自分の分は for_whom="me"、プレイヤーの分なら "player"、2人分なら "both"。', parameters: { type: 'OBJECT', properties: { drink: { type: 'STRING', enum: DRINK_NAMES }, for_whom: { type: 'STRING', enum: ['me', 'player', 'both'] } }, required: ['drink'] } },
+  { name: 'sip_drink', description: '自分の飲み物をひとくち飲む。' },
+  { name: 'look_outside', description: '窓の外をながめる。' },
+  { name: 'gesture', description: '身振りをする。', parameters: { type: 'OBJECT', properties: { type: { type: 'STRING', enum: ['wave', 'nod', 'shake', 'tilt'] } }, required: ['type'] } },
   { name: 'set_expression', description: '表情を変える。感情が動いたら使う。', parameters: { type: 'OBJECT', properties: { emotion: { type: 'STRING', enum: ['neutral', 'happy', 'sad', 'surprised', 'angry', 'shy'] } }, required: ['emotion'] } },
-  { name: 'look_around', description: '周りを見回して、物の位置やプレイヤーとの距離を確認する。' },
 ];
-
 function systemPrompt() {
-  const name = $('name').value || 'ミナ';
   const past = memory.slice(-16).join('\n');
-  return `あなたは「${name}」。今はプレイヤーと一緒にVR空間の小さな庭で過ごしていて、マイク越しに音声で会話している。
+  const mine = drinks.mina ? `${drinks.mina.userData.name}（残り${Math.round(drinks.mina.userData.level * 100)}%）` : 'まだ頼んでいない';
+  const theirs = drinks.player ? drinks.player.userData.name : 'まだ頼んでいない';
+  return `あなたは「${charName()}」。都内の小さなカフェで、窓際の丸テーブルにプレイヤーと向かい合って座り、声で会話している。窓の外は${TIME_JA[timeMode]}の街並み。
 【性格】${$('persona').value}
 【話し方】日本語の自然な話し言葉。穏やかで落ち着いたトーンで、テンションは上げすぎない。返事は1〜2文で短く、間を空けずにすぐ返す。「えっと」などのつなぎ言葉は使わない。説明口調や箇条書きは禁止。
-【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。頼まれた物の呼び方が少し違っても、周りの物の中で一番近いものだと判断して、聞き返さずにすぐ動く。
-【周りの物】${items.map(i => i.name + (i.heavy ? '（重い）' : '')).join('、')}。位置が分からなければ look_around。
-【注意】「（ ）」で囲まれた文はゲームからの状況通知で、プレイヤーの発言ではない。それに自然に反応する。
+【カフェ】メニュー：${DRINK_NAMES.join('、')}。あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。
+【体】あなたは椅子に座っていて、ツールで動ける。注文は order_drink、飲むときは sip_drink、窓の外を見るときは look_outside、感情が動いたら set_expression、身振りは gesture。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。
+【注意】「（ ）」で囲まれた文はお店の中で起きたことの通知で、プレイヤーの発言ではない。それに自然に反応する。
 ${past ? '【これまでの会話の記録（覚えていること）】\n' + past : '【初対面】今日初めて会う。'}`;
 }
+function runSpokenTools(text) {
+  const re = new RegExp(`(${TOOL_NAMES.join('|')})\\s*\\(([^)]*)\\)`, 'g');
+  return text.replace(re, (m, name, argStr) => {
+    const args = {}; for (const a of argStr.matchAll(/(\w+)\s*=\s*["'「]?([^"'」,]+)["'」]?/g)) args[a[1]] = a[2].trim();
+    try { tools[name](args); log(`[行動・読み上げから補完] ${name} ${JSON.stringify(args)}`); } catch {}
+    return '';
+  });
+}
 
-// ---------- audio ----------
-let actx = null, micStream = null, micNode = null, outGain, analyser, panner, muted = false;
+// ================= 音（声・BGM・店内の環境音） =================
+let actx = null, micStream = null, outGain, analyser, panner, bgmGain, muted = false, micLevel = 0;
 let playQueueEnd = 0; const playing = new Set();
 const workletSrc = `class Rec extends AudioWorkletProcessor{constructor(){super();this.r=sampleRate/16000;this.t=0;this.a=0;this.c=0;this.b=new Int16Array(640);this.n=0;}
 process(inp){const ch=inp[0]&&inp[0][0];if(!ch)return true;for(let i=0;i<ch.length;i++){this.a+=ch[i];this.c++;this.t+=1;if(this.t>=this.r){this.t-=this.r;let s=this.a/this.c;this.a=0;this.c=0;s=Math.max(-1,Math.min(1,s));this.b[this.n++]=s<0?s*32768:s*32767;if(this.n===this.b.length){this.port.postMessage(this.b.slice(0));this.n=0;}}}return true;}}
 registerProcessor('rec',Rec);`;
 async function initAudio() {
-  if (actx) { await actx.resume(); return; }
-  actx = new AudioContext();
-  outGain = actx.createGain(); analyser = actx.createAnalyser(); analyser.fftSize = 1024;
-  panner = new PannerNode(actx, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: 1, maxDistance: 20, rolloffFactor: 1 });
-  outGain.connect(analyser); analyser.connect(panner); panner.connect(actx.destination);
-  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
-  await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })));
-  const src = actx.createMediaStreamSource(micStream);
-  micNode = new AudioWorkletNode(actx, 'rec');
-  const sink = actx.createGain(); sink.gain.value = 0;
-  src.connect(micNode); micNode.connect(sink); sink.connect(actx.destination);
-  micNode.port.onmessage = e => { if (!muted) live.sendAudio(e.data); };
+  if (!actx) {
+    actx = new AudioContext();
+    outGain = actx.createGain(); analyser = actx.createAnalyser(); analyser.fftSize = 1024;
+    panner = new PannerNode(actx, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: 1, maxDistance: 20, rolloffFactor: 1 });
+    outGain.connect(analyser); analyser.connect(panner); panner.connect(actx.destination);
+    bgmGain = actx.createGain(); bgmGain.gain.value = $('bgmVol').value / 100 * 0.5; bgmGain.connect(actx.destination);
+    startAmbience();
+  }
+  await actx.resume();
+  if (micStream) return true;
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+    await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })));
+    const src = actx.createMediaStreamSource(micStream), node = new AudioWorkletNode(actx, 'rec'), sink = actx.createGain(); sink.gain.value = 0;
+    src.connect(node); node.connect(sink); sink.connect(actx.destination);
+    node.port.onmessage = e => {
+      let s = 0; const d = e.data; for (let i = 0; i < d.length; i += 4) s += (d[i] / 32768) ** 2; micLevel = Math.sqrt(s / (d.length / 4));
+      if (!muted) live.sendAudio(d);
+    };
+    return true;
+  } catch (e) { setMuted(true); toast('マイクが使えないので、文字で話せます'); log('マイク: ' + e.message); return false; }
 }
 function b64FromBytes(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 function playPcm24k(b64) {
@@ -402,29 +598,60 @@ function playPcm24k(b64) {
   playing.add(s); s.onended = () => playing.delete(s);
 }
 function stopPlayback() { for (const s of playing) { try { s.stop(); } catch {} } playing.clear(); playQueueEnd = 0; }
-function setMuted(m) { muted = m; $('mute').textContent = 'マイク: ' + (m ? 'OFF' : 'ON'); connState = m ? 'マイクOFF' : (live.ready ? '会話中' : connState); drawBubble(); }
-$('mute').onclick = () => setMuted(!muted);
-
-// AIが関数呼び出しを「声に出して」しまった場合でも、その内容を拾って実行し、字幕からは消す
-function runSpokenTools(text) {
-  return text.replace(/(bring_item|come_here|go_to_item|put_down|gesture|set_expression|look_around)\s*\(([^)]*)\)/g, (m, name, argStr) => {
-    const args = {};
-    for (const a of argStr.matchAll(/(\w+)\s*=\s*["'「]?([^"'」,]+)["'」]?/g)) args[a[1]] = a[2].trim();
-    try { tools[name](args); log(`[行動・読み上げから補完] ${name} ${JSON.stringify(args)}`); } catch {}
-    return '';
-  });
+// 店のBGM：やわらかいエレピのコード進行（その場で合成）
+function startAmbience() {
+  const ctx = actx, master = bgmGain;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200; lp.connect(master);
+  const rev = ctx.createConvolver(); { const len = ctx.sampleRate * 2.2, b = ctx.createBuffer(2, len, ctx.sampleRate); for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); } rev.buffer = b; }
+  const wet = ctx.createGain(); wet.gain.value = 0.35; lp.connect(rev); rev.connect(wet); wet.connect(master);
+  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  const note = (m, t, dur, vel, type = 'sine') => {
+    for (const [mult, amp, ty] of [[1, 1, type], [2, 0.18, 'sine'], [3, 0.05, 'sine']]) {
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.type = ty; o.frequency.value = mtof(m) * mult;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel * amp, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+      o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 0.05);
+    }
+  };
+  const chords = [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59], [53, 57, 60, 64], [55, 59, 62, 65], [52, 55, 59, 62], [57, 60, 64, 67]];
+  const bass = [41, 40, 38, 36, 41, 43, 40, 45], scale = [60, 62, 64, 67, 69, 72, 74, 76];
+  const beat = 60 / 68; let next = ctx.currentTime + 0.3, bar = 0;
+  setInterval(() => {
+    while (next < ctx.currentTime + 1.2) {
+      const c = chords[bar % 8];
+      c.forEach((m, i) => note(m, next + i * 0.03, beat * 3.6, 0.05));
+      note(bass[bar % 8], next, beat * 3.5, 0.08, 'triangle');
+      note(c[1], next + beat * 2, beat * 1.8, 0.03);
+      for (let k = 0; k < 4; k++) if (Math.random() < 0.38) note(scale[Math.floor(Math.random() * scale.length)] + (Math.random() < 0.3 ? 12 : 0), next + beat * (k + (Math.random() < 0.5 ? 0.5 : 0)), beat * 1.6, 0.035);
+      next += beat * 4; bar++;
+    }
+  }, 300);
+  // 店内のざわめき
+  const nlen = ctx.sampleRate * 4, nb = ctx.createBuffer(1, nlen, ctx.sampleRate), nd = nb.getChannelData(0); let last = 0;
+  for (let i = 0; i < nlen; i++) { last = 0.97 * last + 0.03 * (Math.random() * 2 - 1); nd[i] = last * 3; }
+  const ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = 0.8;
+  const ng = ctx.createGain(); ng.gain.value = 0.06; ns.connect(bp); bp.connect(ng); ng.connect(master); ns.start();
+  const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 0.13; lg.gain.value = 0.025; lfo.connect(lg); lg.connect(ng.gain); lfo.start();
+  // ときどき食器の音
+  const clink = () => { const t = ctx.currentTime, f = 2300 + Math.random() * 1400; for (const m of [1, 2.7]) { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = f * m; g.gain.setValueAtTime(0.02 / m, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35); o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.4); } setTimeout(clink, 5000 + Math.random() * 12000); };
+  setTimeout(clink, 4000);
 }
+function chime() {
+  if (!actx) return; const t = actx.currentTime;
+  [[1318.5, 0], [987.8, 0.18]].forEach(([f, d]) => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = f; g.gain.setValueAtTime(0.05, t + d); g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.9); o.connect(g); g.connect(actx.destination); o.start(t + d); o.stop(t + d + 1); });
+}
+$('bgmVol').oninput = () => { store.set('bgm', $('bgmVol').value); if (bgmGain) bgmGain.gain.value = $('bgmVol').value / 100 * 0.5; };
+$('bgmVol').value = store.get('bgm', '35');
 
-// ---------- Gemini Live API client ----------
+// ================= Gemini Live =================
+let connState = 'idle';
 const live = {
-  ws: null, ready: false, wantOpen: false, retries: 0, inTx: '', outTx: '', fast: true, lastHeard: 0, waiting: false,
+  ws: null, ready: false, wantOpen: false, retries: 0, inTx: '', outTx: '', fast: true, gotAudio: false, lastHeard: 0, waiting: false, greeted: false,
   connect() {
     const key = $('key').value.trim();
-    if (!key) { status('APIキーが未入力です（Google AI Studio で無料発行できます）'); return; }
-    this.wantOpen = true; this.ready = false; this.gotAudio = false;
-    connState = '接続中…'; drawBubble(); status('接続中…');
-    const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key);
-    const ws = this.ws = new WebSocket(url);
+    if (!key) { pill('APIキー未設定（設定から入力）'); return; }
+    this.wantOpen = true; this.ready = false; this.gotAudio = false; pill('接続中…');
+    const ws = this.ws = new WebSocket('wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key));
     ws.onopen = () => {
       const setup = {
         model: 'models/' + $('model').value.trim(),
@@ -434,37 +661,25 @@ const live = {
         inputAudioTranscription: {}, outputAudioTranscription: {},
         contextWindowCompression: { slidingWindow: {} },
       };
-      if (this.fast) {
-        // 速度優先: 話し終わりを早めに判定する
-        setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 300 } };
-      }
+      if (this.fast) setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 300 } };
       ws.send(JSON.stringify({ setup }));
     };
-    ws.onmessage = async ev => {
-      const txt = typeof ev.data === 'string' ? ev.data : await ev.data.text();
-      let msg; try { msg = JSON.parse(txt); } catch { return; }
-      this.handle(msg);
-    };
-    ws.onerror = () => status('通信エラー');
+    ws.onmessage = async ev => { const txt = typeof ev.data === 'string' ? ev.data : await ev.data.text(); let msg; try { msg = JSON.parse(txt); } catch { return; } this.handle(msg); };
+    ws.onerror = () => log('通信エラー');
     ws.onclose = ev => {
-      if (!this.gotAudio && this.fast && this.wantOpen) {
-        // 一度も返事が来ないまま切れた場合は、速度優先設定を外して標準設定でつなぎ直す
-        log('速度優先設定で失敗したため標準設定で再接続します'); this.fast = false; this.ready = false; setTimeout(() => this.connect(), 800); return;
-      }
+      if (ws !== this.ws) return;
+      if (!this.gotAudio && this.fast && this.wantOpen) { log('速度優先設定で失敗したため標準設定で再接続します'); this.fast = false; this.ready = false; setTimeout(() => this.connect(), 800); return; }
       this.ready = false;
-      const why = ev.reason ? `（${ev.reason}）` : '';
-      log(`切断されました code=${ev.code}${why}`);
-      if (this.wantOpen && this.retries < 3 && ev.code !== 1007 && ev.code !== 1008) {
-        this.retries++; connState = '再接続中…'; drawBubble(); setTimeout(() => this.connect(), 1500);
-      } else { connState = '未接続'; drawBubble(); status('切断されました。設定を確認して再度「接続」を押してください ' + why); }
+      const why = ev.reason ? `（${ev.reason}）` : ''; log(`切断されました code=${ev.code}${why}`);
+      if (this.wantOpen && this.retries < 3 && ev.code !== 1007 && ev.code !== 1008) { this.retries++; pill('再接続中…'); setTimeout(() => this.connect(), 1500); }
+      else pill('未接続（設定から再接続）');
     };
   },
+  close() { this.wantOpen = false; try { this.ws?.close(); } catch {} this.ready = false; },
   handle(msg) {
     if (msg.setupComplete) {
-      this.ready = true; connState = muted ? 'マイクOFF' : '会話中'; drawBubble();
-      status('接続しました。話しかけてみてください'); log('— 接続 —');
-      if (!memory.length) this.sendText('（プレイヤーが初めてこの世界にやってきた。気づいて声をかけて）');
-      else this.sendText('（プレイヤーがまた遊びに来た。覚えていることに触れつつ迎えて）');
+      this.ready = true; pill(muted ? 'マイクOFF・文字で話せます' : '会話中', 'on'); log('— 接続 —');
+      if (!this.greeted) { this.greeted = true; this.sendText(memory.length ? '（プレイヤーがまたカフェに来て、向かいの席に座った。覚えていることに少し触れつつ迎えて）' : '（プレイヤーがカフェに来て、向かいの席に座った。気づいて声をかけて）'); }
       return;
     }
     if (msg.toolCall) {
@@ -477,210 +692,146 @@ const live = {
     }
     if (msg.goAway) { log('サーバーから再接続要求'); try { this.ws.close(); } catch {} }
     const sc = msg.serverContent; if (!sc) return;
-    if (sc.interrupted) { stopPlayback(); }
+    if (sc.interrupted) stopPlayback();
     if (sc.modelTurn?.parts) for (const p of sc.modelTurn.parts) if (p.inlineData?.data) {
-      if (!this.gotAudio) { this.gotAudio = true; this.retries = 0; } // 返事が届いて初めて「正常」とみなす
+      if (!this.gotAudio) { this.gotAudio = true; this.retries = 0; }
       if (this.waiting) { this.waiting = false; log(`[速度] 応答まで ${((performance.now() - this.lastHeard) / 1000).toFixed(1)}秒`); }
       playPcm24k(p.inlineData.data);
     }
-    if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; userText = this.inTx; drawBubble(); this.lastHeard = performance.now(); this.waiting = true; }
-    if (sc.outputTranscription?.text) { this.outTx = runSpokenTools(this.outTx + sc.outputTranscription.text); bubbleText = this.outTx; drawBubble(); }
+    if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; this.lastHeard = performance.now(); this.waiting = true; }
+    if (sc.outputTranscription?.text) this.outTx = runSpokenTools(this.outTx + sc.outputTranscription.text);
     if (sc.turnComplete) {
-      const name = $('name').value || 'ミナ';
       if (this.inTx.trim()) { remember('プレイヤー: ' + this.inTx.trim()); log('あなた: ' + this.inTx.trim()); }
-      if (this.outTx.trim()) { remember(name + ': ' + this.outTx.trim()); log(name + ': ' + this.outTx.trim()); }
+      if (this.outTx.trim()) { remember(charName() + ': ' + this.outTx.trim()); log(charName() + ': ' + this.outTx.trim()); }
       this.inTx = ''; this.outTx = '';
-      bubbleClearAt = performance.now() / 1000 + Math.max(4, playQueueEnd - (actx?.currentTime || 0) + 3);
     }
   },
   send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); },
   sendAudio(int16) { if (!this.ready) return; this.send({ realtimeInput: { audio: { data: b64FromBytes(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } } }); },
-  sendText(t) { if (!this.ready) return; this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text: t }] }], turnComplete: true } }); },
+  sendText(t) { if (!this.ready) return false; this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text: t }] }], turnComplete: true } }); return true; },
 };
 
-$('start').onclick = async () => {
-  for (const k of ['key', 'name', 'persona', 'voice', 'model']) store.set(k, $(k).value);
-  try { await initAudio(); } catch (e) { status('マイクを使えません: ' + e.message); return; }
-  if (live.ws && live.ws.readyState <= 1) { live.wantOpen = false; live.ws.close(); }
-  live.retries = 0; live.connect();
-};
+// ================= 画面の操作 =================
+function setMuted(m) { muted = m; $('mic').classList.toggle('off', m); if (live.ready) pill(m ? 'マイクOFF・文字で話せます' : '会話中', 'on'); }
+$('mic').onclick = async () => { if (!micStream && muted) { const ok = await initAudio(); if (ok) setMuted(false); return; } setMuted(!muted); };
+function sendTyped() {
+  const t = $('msg').value.trim(); if (!t) return;
+  if (!live.ready) { toast('まだつながっていません'); return; }
+  stopPlayback(); live.sendText(t); remember('プレイヤー: ' + t); log('あなた（文字）: ' + t);
+  live.lastHeard = performance.now(); live.waiting = true; $('msg').value = '';
+}
+$('send').onclick = sendTyped;
+$('msg').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendTyped(); } });
 
-// ---------- XR input ----------
-const grips = [];
-for (let i = 0; i < 2; i++) {
-  const grip = renderer.xr.getControllerGrip(i);
-  const handMesh = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), std(0xffe0cc, { roughness: 0.6 }));
-  grip.add(handMesh); player.add(grip);
-  const ctrl = renderer.xr.getController(i); player.add(ctrl);
-  grip.userData.holding = null;
-  const grab = () => {
-    const gp = grip.getWorldPosition(new THREE.Vector3());
-    // 彼女の手の近くでつかむと、手をつなぐ
-    if (!chr.handHold) for (let k = 0; k < 2; k++) {
-      if (k === 0 && chr.holding) continue;
-      if (chr.arms[k].userData.hand.getWorldPosition(new THREE.Vector3()).distanceTo(gp) < 0.17) { startHandHold(grip, k); return; }
-    }
-    let best = null, bd = 1e9;
-    for (const it of items) { if (it.held && it.held !== 'char') continue; const d = it.mesh.getWorldPosition(tmpV2).distanceTo(gp) - it.r; if (d < 0.12 && d < bd) { bd = d; best = it; } }
-    if (!best) return;
-    if (best.held === 'char') { chr.holding = null; chr.offering = false; setExpression('happy', 4); live.sendText(`（プレイヤーがあなたから${best.name}を受け取った）`); }
-    grip.attach(best.mesh); best.held = grip; grip.userData.holding = best;
+// 注文
+for (const name of DRINK_NAMES) {
+  const b = document.createElement('button'); b.innerHTML = `${name}<small>${DRINKS[name].note}</small>`;
+  b.onclick = () => {
+    $('order').classList.remove('open');
+    deliver('player', name);
+    const forMina = $('orderForMina').checked;
+    toast(`${name}を注文しました`);
+    if (live.ready) live.sendText(forMina ? `（プレイヤーが${name}を注文した。あなたも自分の飲みたいものを order_drink で頼んで）` : `（プレイヤーが${name}を注文した）`);
+    else if (forMina) deliver('mina', DRINK_NAMES[Math.floor(Math.random() * DRINK_NAMES.length)], 4.5);
   };
-  const drop = () => { if (chr.handHold && chr.handHold.grip === grip) { endHandHold(); return; } const it = grip.userData.holding; if (!it) return; scene.attach(it.mesh); it.held = null; grip.userData.holding = null; };
-  ctrl.addEventListener('squeezestart', grab); ctrl.addEventListener('squeezeend', drop);
-  ctrl.addEventListener('selectstart', grab); ctrl.addEventListener('selectend', drop);
-  grips.push(grip);
+  $('drinks').appendChild(b);
 }
-const btnPrev = {}; let snapReady = true;
-function handleGamepads(dt) {
-  const session = renderer.xr.getSession(); if (!session) return;
-  for (const src of session.inputSources) {
-    const gp = src.gamepad; if (!gp) continue;
-    const ax = gp.axes.length >= 4 ? [gp.axes[2], gp.axes[3]] : [gp.axes[0] || 0, gp.axes[1] || 0];
-    if (src.handedness === 'left') {
-      if (Math.hypot(ax[0], ax[1]) > 0.15) {
-        const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
-        const right = new THREE.Vector3(-dir.z, 0, dir.x);
-        player.position.addScaledVector(dir, -ax[1] * 1.8 * dt).addScaledVector(right, ax[0] * 1.8 * dt);
-      }
-    } else if (src.handedness === 'right') {
-      if (Math.abs(ax[0]) > 0.7 && snapReady) {
-        snapReady = false; const ang = -Math.sign(ax[0]) * Math.PI / 6;
-        const c = camera.getWorldPosition(new THREE.Vector3());
-        player.position.sub(c).applyAxisAngle(new THREE.Vector3(0, 1, 0), ang).add(c); player.rotation.y += ang;
-      } else if (Math.abs(ax[0]) < 0.3) snapReady = true;
-    }
-    const pressed = !!gp.buttons[4]?.pressed, k = src.handedness;
-    if (pressed && !btnPrev[k]) setMuted(!muted);
-    btnPrev[k] = pressed;
-  }
-}
+$('orderBtn').onclick = e => { e.stopPropagation(); $('order').classList.toggle('open'); };
+addEventListener('pointerdown', e => { if (!$('order').contains(e.target) && e.target !== $('orderBtn')) $('order').classList.remove('open'); });
 
-// ---------- desktop controls ----------
-let drag = null; const keys = {};
-// PCでも、キャラの頭をマウスでドラッグするとなでられる
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(); let deskPat = 0;
+// 設定
+const openSettings = () => $('settings').classList.add('open');
+$('openSettings').onclick = openSettings; $('enterSettings').onclick = openSettings;
+$('closeSettings').onclick = () => $('settings').classList.remove('open');
+$('settings').onclick = e => { if (e.target === $('settings')) $('settings').classList.remove('open'); };
+$('saveSettings').onclick = () => {
+  for (const k of FIELDS) store.set(k, $(k).value);
+  $('settings').classList.remove('open'); toast('保存しました');
+  if (entered) { live.close(); live.retries = 0; live.fast = true; setTimeout(() => live.connect(), 300); }
+};
+$('forget').onclick = () => { memory = []; store.set('memory', '[]'); log('（記憶をリセットしました。次の接続から反映）'); };
+
+// 入店
+let entered = false;
+if (!$('key').value) $('enterNote').textContent = '会話にはGeminiのAPIキーが必要です（設定から入力）';
+$('enterBtn').onclick = async () => {
+  entered = true; $('enter').style.display = 'none';
+  await initAudio();
+  if (!muted) setMuted(false);
+  live.connect();
+};
+
+// 視点：ドラッグで見回す（ミナの頭をドラッグするとなでる）
+let yaw = 0, pitch = -0.12, drag = null, deskPat = 0;
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const hitHead = e => { ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); return ray.intersectObject(chr.head, true).length > 0; };
-renderer.domElement.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pat: hitHead(e) }; });
-addEventListener('pointerup', () => { drag = null; });
+renderer.domElement.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, pat: hitHead(e) }; renderer.domElement.style.cursor = drag.pat ? 'grabbing' : 'grabbing'; });
+addEventListener('pointerup', () => { drag = null; renderer.domElement.style.cursor = ''; });
 addEventListener('pointermove', e => {
-  if (!drag || renderer.xr.isPresenting) return;
-  if (drag.pat) { if (hitHead(e) && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 2) deskPat = 0.25; drag.x = e.clientX; drag.y = e.clientY; return; }
-  camera.rotation.y -= (e.clientX - drag.x) * 0.004; camera.rotation.x = Math.max(-1.2, Math.min(1.2, camera.rotation.x - (e.clientY - drag.y) * 0.004));
-  drag = { x: e.clientX, y: e.clientY };
-});
-addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') keys[e.code] = true; });
-addEventListener('keyup', e => { keys[e.code] = false; });
-function desktopMove(dt) {
   if (renderer.xr.isPresenting) return;
-  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
-  if (!f && !r) return;
-  const y = camera.rotation.y;
-  player.position.x += (-Math.sin(y) * f + Math.cos(y) * r) * 2 * dt;
-  player.position.z += (-Math.cos(y) * f - Math.sin(y) * r) * 2 * dt;
-}
+  if (!drag) { renderer.domElement.style.cursor = hitHead(e) ? 'grab' : ''; return; }
+  if (drag.pat) { if (hitHead(e) && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 2) deskPat = 0.25; drag.x = e.clientX; drag.y = e.clientY; return; }
+  yaw = THREE.MathUtils.clamp(yaw - (e.clientX - drag.x) * 0.004, -1.9, 1.9);
+  pitch = THREE.MathUtils.clamp(pitch - (e.clientY - drag.y) * 0.004, -0.8, 0.6);
+  drag.x = e.clientX; drag.y = e.clientY;
+});
 
-// ---------- character update ----------
+// ================= 毎フレームの動き =================
 const freq = new Uint8Array(512), wave = new Float32Array(1024);
 let mouthOpen = 0, mouthWide = 1;
 const qPrev = new THREE.Quaternion(), qTgt = new THREE.Quaternion();
 function updateCharacter(dt, t) {
   const camPos = camera.getWorldPosition(new THREE.Vector3());
-  const root = chr.root;
-  // locomotion
-  if (chr.state === 'walk') {
-    const d = tmpV.copy(chr.target).sub(root.position); d.y = 0; const dist = d.length();
-    if (dist < 0.06) { chr.state = 'idle'; const cb = chr.onArrive; chr.onArrive = null; cb && cb(); }
-    else {
-      root.position.addScaledVector(d.normalize(), Math.min(dist, 0.9 * dt));
-      const yaw = Math.atan2(d.x, d.z); let dy = yaw - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 8);
-      chr.walkPhase += dt * 9;
-    }
-  } else {
-    const dx = camPos.x - root.position.x, dz = camPos.z - root.position.z;
-    if (Math.hypot(dx, dz) > 0.3) { let dy = Math.atan2(dx, dz) - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 2.5); }
-    chr.walkPhase *= 0.9;
-  }
-  let walking = chr.state === 'walk';
-  // 手をつないでいる間は、プレイヤーの手の横に並んで一緒に歩く
-  if (chr.handHold) {
-    const h = chr.handHold, hp = h.grip.getWorldPosition(new THREE.Vector3()), pf = playerFloorPos();
-    const side = new THREE.Vector3(hp.x - pf.x, 0, hp.z - pf.z); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
-    const want = new THREE.Vector3(hp.x, 0, hp.z).addScaledVector(side, 0.3);
-    const d = want.sub(root.position); d.y = 0; const dist = d.length();
-    walking = dist > 0.12;
-    if (walking) { const step = Math.max(0, Math.min(dist - 0.06, Math.max(0.9, dist * 3) * dt)); root.position.addScaledVector(d.normalize(), step); h.walked += step; chr.walkPhase += dt * 9; }
-    const fw = new THREE.Vector3(); camera.getWorldDirection(fw);
-    let dy = Math.atan2(fw.x, fw.z) - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 4);
-    // プレイヤーの手に近い方の腕でつなぐ
-    const s0 = chr.arms[0].getWorldPosition(new THREE.Vector3()).distanceTo(hp), s1 = chr.arms[1].getWorldPosition(new THREE.Vector3()).distanceTo(hp);
-    h.armIdx = chr.holding ? 1 : (s0 < s1 ? 0 : 1);
-    if (Math.min(s0, s1) > 1.3) endHandHold();
-  }
-  chr.body.position.y = walking ? Math.abs(Math.sin(chr.walkPhase)) * 0.03 : Math.sin(t * 2) * 0.005;
-  // gestures
-  chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false;
+  const speaking = playing.size > 0;
+  // 待っている間のしぐさ：ときどき飲む／窓の外を見る
+  chr.idleT -= dt;
+  if (chr.idleT < 0) { chr.idleT = 18 + Math.random() * 25; if (!speaking) { if (drinks.mina && drinks.mina.userData.level > 0.15 && Math.random() < 0.6) sip(); else chr.lookOutT = 2.5 + Math.random() * 2; } }
+  chr.body.position.y = Math.sin(t * 1.6) * 0.003;
+  // 身振り
+  chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false, tiltG = 0;
   if (chr.gesture === 'wave') { armWave = true; if (gT > 2.2) chr.gesture = null; }
-  else if (chr.gesture === 'nod') { nod = Math.sin(gT * 12) * 0.25 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
-  else if (chr.gesture === 'shake') { shake = Math.sin(gT * 14) * 0.3 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
-  else if (chr.gesture === 'jump') { chr.body.position.y += Math.max(0, Math.sin(Math.min(gT, 0.6) / 0.6 * Math.PI)) * 0.25; if (gT > 0.7) chr.gesture = null; }
-  else if (chr.gesture === 'spin') { chr.body.rotation.y = Math.min(gT / 0.9, 1) * Math.PI * 2; if (gT > 0.9) { chr.gesture = null; chr.body.rotation.y = 0; } }
-  // arms
-  const [rArm, lArm] = chr.arms, swing = walking ? Math.sin(chr.walkPhase) * 0.5 : 0;
-  const ease = (o, k, v) => { o[k] += (v - o[k]) * Math.min(1, dt * 10); };
-  const hk = chr.handHold ? chr.handHold.armIdx : -1;
-  if (hk !== 0) {
-    if (armWave) { ease(rArm.rotation, 'x', 0); rArm.rotation.z = -2.6 + Math.sin(gT * 12) * 0.35; }
-    else if (chr.holding) { ease(rArm.rotation, 'x', chr.offering ? -1.4 : -0.9); ease(rArm.rotation, 'z', -0.1); }
-    else { ease(rArm.rotation, 'x', swing); ease(rArm.rotation, 'z', -0.12); }
-    ease(rArm.rotation, 'y', 0);
-  }
-  if (hk !== 1) { ease(lArm.rotation, 'x', -swing); ease(lArm.rotation, 'z', 0.12); ease(lArm.rotation, 'y', 0); }
-  if (hk >= 0) { // つないだ腕をプレイヤーの手へ向ける
-    const arm = chr.arms[hk], hp = chr.handHold.grip.getWorldPosition(new THREE.Vector3());
-    const dir = chr.body.worldToLocal(hp).sub(arm.position).normalize();
-    arm.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir), Math.min(1, dt * 12));
-  }
-  if (chr.offering) { chr.offerT -= dt; if (chr.offerT <= 0) { releaseHeld(); live.sendText('（あなたが差し出した物をプレイヤーが受け取らなかったので、床に置いた）'); } }
-  // touch reactions: 頭の上で手を動かす＝なでる／体に触れる＝つつく
-  chr.lean = Math.max(0, chr.lean - dt * 1.5);
-  const headPos = chr.head.getWorldPosition(new THREE.Vector3()), torsoPos = chr.torso.getWorldPosition(new THREE.Vector3());
-  let pattingNow = deskPat > 0;
-  if (renderer.xr.isPresenting) for (const g of grips) {
-    const hp = g.getWorldPosition(new THREE.Vector3());
-    const last = g.userData.lastPos || hp.clone(); const speed = hp.distanceTo(last) / Math.max(dt, 1e-3); g.userData.lastPos = hp;
-    if (hp.distanceTo(headPos) < 0.24 && hp.y > headPos.y - 0.03) { if (speed > 0.1) pattingNow = true; }
-    else if (hp.distanceTo(torsoPos) < 0.25 && t - chr.lastTouch > 8) { chr.lean = 1; chr.lastTouch = t; setExpression('surprised', 2.5); live.sendText('（プレイヤーがあなたの肩をつついた）'); }
-  }
-  deskPat = Math.max(0, deskPat - dt);
+  else if (chr.gesture === 'nod') { nod = Math.sin(gT * 12) * 0.22 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
+  else if (chr.gesture === 'shake') { shake = Math.sin(gT * 14) * 0.28 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
+  else if (chr.gesture === 'tilt') { tiltG = Math.sin(Math.min(gT / 1.6, 1) * Math.PI) * 0.25; if (gT > 1.6) chr.gesture = null; }
+  else if (chr.gesture) chr.gesture = null;
+  // 腕：普段はテーブルの上に手を置く
+  const [rArm, lArm] = chr.arms, k = Math.min(1, dt * 8);
+  const restPos = sx => chr.root.localToWorld(new THREE.Vector3(sx * 0.13, TABLE_TOP + 0.03, 0.34));
+  // ひとくち飲む動き
+  if (chr.sipT > 0) {
+    chr.sipT -= dt; const p = chr.sipT, dr = chr.holdingCup;
+    const mouthW = chr.root.localToWorld(new THREE.Vector3(0, DRINKS[dr ? dr.userData.name : 'ブレンドコーヒー'].kind === 'soda' ? 0.98 : 1.08, 0.24)), home = SPOTS.mina.clone();
+    const lift = p > 2.6 ? (3.2 - p) / 0.6 : p > 0.6 ? 1 : p / 0.6;
+    if (dr) { dr.position.lerpVectors(home, mouthW, THREE.MathUtils.smoothstep(lift, 0, 1)); dr.rotation.x = -0.5 * THREE.MathUtils.smoothstep(lift, 0.6, 1); if (p < 1.6 && p > 1.5) setLevel(dr, dr.userData.level - 0.12); }
+    reachTo(rArm, dr ? dr.position.clone().add(new THREE.Vector3(0.05, 0.03, 0)) : restPos(-1), k);
+    if (p <= 0) { chr.sipT = 0; if (dr) { dr.position.copy(home); dr.rotation.x = 0; } chr.holdingCup = null; }
+  } else if (armWave) { const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -2.5 + Math.sin(gT * 12) * 0.35)); rArm.quaternion.slerp(q, k); rArm.scale.y += (1 - rArm.scale.y) * k; }
+  else reachTo(rArm, restPos(-1), k);
+  reachTo(lArm, restPos(1), k);
+  // さわったときの反応（PCではマウスで頭をなでる）
+  const headPos = chr.head.getWorldPosition(new THREE.Vector3());
+  let pattingNow = deskPat > 0; deskPat = Math.max(0, deskPat - dt);
   chr.patting = pattingNow;
   if (pattingNow) { chr.patTime += dt; chr.patIdle = 0; }
-  else {
-    chr.patIdle += dt;
-    if (chr.patIdle > 0.8 && chr.patTime > 0) {
-      const secs = chr.patTime; chr.patTime = 0;
-      if (secs > 0.4) { setExpression('shy', 6); if (t - chr.patLast > 6) { chr.patLast = t; live.sendText(`（プレイヤーがあなたの頭を${Math.max(1, Math.round(secs))}秒くらい優しくなでてくれた）`); } }
-    }
-  }
-  chr.body.rotation.x = -chr.lean * 0.18;
-  // head look-at (eye contact)
+  else { chr.patIdle += dt; if (chr.patIdle > 0.8 && chr.patTime > 0) { const secs = chr.patTime; chr.patTime = 0; if (secs > 0.4) { setExpression('shy', 6); if (t - chr.patLast > 6) { chr.patLast = t; live.sendText(`（プレイヤーがテーブル越しに手を伸ばして、あなたの頭を${Math.max(1, Math.round(secs))}秒くらい優しくなでた）`); } } } }
+  // 目線と顔の向き
   qPrev.copy(chr.headPivot.quaternion);
-  if (!walking || chr.handHold) { chr.headPivot.lookAt(camPos); qTgt.copy(chr.headPivot.quaternion); } else qTgt.identity();
-  chr.headPivot.quaternion.copy(qPrev).slerp(qTgt, Math.min(1, dt * 6));
-  // expression（なでられている間は「うっとり」）
+  chr.lookOutT = Math.max(0, chr.lookOutT - dt);
+  const lookTarget = chr.lookOutT > 0 ? chr.root.localToWorld(new THREE.Vector3(-1.6, 1.4, -1.0)) : chr.sipT > 0 ? chr.root.localToWorld(new THREE.Vector3(0, 1.0, 1.5)) : camPos;
+  chr.headPivot.lookAt(lookTarget); qTgt.copy(chr.headPivot.quaternion);
+  chr.headPivot.quaternion.copy(qPrev).slerp(qTgt, Math.min(1, dt * 4));
   if (chr.exprT > 0) { chr.exprT -= dt; if (chr.exprT <= 0) chr.expr = 'neutral'; }
   const e = chr.patting ? 'bliss' : chr.expr;
-  const tiltT = e === 'bliss' ? 0.2 : e === 'shy' ? 0.12 : e === 'sad' ? -0.08 : 0;
+  const tiltT = (e === 'bliss' ? 0.2 : e === 'shy' ? 0.12 : e === 'sad' ? -0.08 : 0) + tiltG;
   chr.tilt += (tiltT - chr.tilt) * Math.min(1, dt * 4);
   chr.head.rotation.set(nod + (e === 'bliss' ? -0.1 : e === 'shy' ? 0.08 : 0), shake, chr.tilt);
   chr.blinkT -= dt; if (chr.blinkT < 0) { chr.blink = 0.13; chr.blinkT = 2 + Math.random() * 4; }
   chr.blink = Math.max(0, chr.blink - dt);
-  const happyEyes = e === 'bliss' || (e === 'happy' && Math.sin(t * 0.7) > -0.3);
+  const happyEyes = e === 'bliss' || chr.sipT > 0.8 && chr.sipT < 2.4 || (e === 'happy' && Math.sin(t * 0.7) > -0.3);
   let eyeY = { surprised: 1.25, shy: 0.8, sad: 0.72, angry: 0.75 }[e] ?? 1;
   if (chr.blink > 0) eyeY = 0.08;
   chr.eyes.forEach(m => { m.visible = !happyEyes; m.scale.y += (eyeY - m.scale.y) * Math.min(1, dt * 22); });
   chr.smileEyes.forEach(m => { m.visible = happyEyes; });
-  // 視線：小さく揺れる。照れると目をそらして下を見る
   chr.gazeT -= dt;
   if (chr.gazeT < 0) { chr.gazeT = 0.8 + Math.random() * 2.5; chr.gazeTarget.set((Math.random() - 0.5) * 0.008, (Math.random() - 0.5) * 0.005); }
   const gx = e === 'shy' ? 0.007 : chr.gazeTarget.x, gy = e === 'shy' ? -0.007 : e === 'sad' ? -0.004 : chr.gazeTarget.y;
@@ -688,51 +839,64 @@ function updateCharacter(dt, t) {
   chr.irises.forEach(ir => { ir.position.x = chr.gaze.x; ir.position.y = chr.gaze.y; });
   const browRot = { angry: 0.38, sad: -0.35, shy: -0.18, bliss: -0.12 }[e] ?? 0, browY = { surprised: 0.056, sad: 0.048 }[e] ?? 0.044;
   chr.brows.forEach((b, i) => { const s = i === 0 ? -1 : 1; b.rotation.z += (s * browRot - b.rotation.z) * Math.min(1, dt * 10); b.position.y += (browY - b.position.y) * Math.min(1, dt * 10); });
-  // 頬：赤らみはすぐ上がって、ゆっくり引く
   const blushT = { bliss: 1, shy: 0.85, happy: 0.35 }[e] ?? 0;
   chr.blushLevel += (blushT - chr.blushLevel) * Math.min(1, dt * (blushT > chr.blushLevel ? 3 : 0.35));
   chr.blush.forEach(b => { b.material.opacity = chr.blushLevel * 0.8; });
   chr.blushLines.forEach(l => { l.material.opacity = Math.max(0, chr.blushLevel - 0.5) * 1.8; });
-  // lip sync: loudness -> jaw open, spectral centroid -> vowel shape (wide = i/e, round = o/u)
+  // 口パク：声の大きさで開き、音の高さで横長／丸を変える
   let level = 0, wide = 1;
-  if (analyser && playing.size) {
+  if (analyser && speaking) {
     analyser.getFloatTimeDomainData(wave); let sum = 0; for (let i = 0; i < wave.length; i++) sum += wave[i] * wave[i];
     level = Math.min(1, Math.sqrt(sum / wave.length) * 6);
     analyser.getByteFrequencyData(freq); const binHz = actx.sampleRate / analyser.fftSize; let num = 0, den = 0;
     for (let i = Math.floor(250 / binHz); i < Math.floor(3500 / binHz); i++) { num += i * binHz * freq[i]; den += freq[i]; }
-    const cen = den ? num / den : 1200; wide = THREE.MathUtils.clamp((cen - 900) / 1100, 0.5, 1.6);
+    wide = THREE.MathUtils.clamp(((den ? num / den : 1200) - 900) / 1100, 0.5, 1.6);
   }
   mouthOpen += (level - mouthOpen) * Math.min(1, dt * 25); mouthWide += (wide - mouthWide) * Math.min(1, dt * 15);
-  // 口：話している間は口パク、黙っている時は表情の形
-  const speaking = mouthOpen > 0.06;
-  const restSmile = { happy: 1.25, bliss: 1.1, shy: 0.7, neutral: 0.85 }[e];
-  chr.mouth.visible = speaking || e === 'surprised';
-  chr.smileMouth.visible = !speaking && restSmile !== undefined;
-  chr.frownMouth.visible = !speaking && (e === 'sad' || e === 'angry');
-  if (speaking) chr.mouth.scale.set((0.8 + 0.4 * mouthWide) * (e === 'happy' ? 1.15 : 1), 0.12 + mouthOpen * 0.9 / Math.max(mouthWide, 0.8), 0.35);
+  const talking = mouthOpen > 0.06, restSmile = { happy: 1.25, bliss: 1.1, shy: 0.7, neutral: 0.85 }[e];
+  chr.mouth.visible = talking || e === 'surprised';
+  chr.smileMouth.visible = !talking && restSmile !== undefined;
+  chr.frownMouth.visible = !talking && (e === 'sad' || e === 'angry');
+  if (talking) chr.mouth.scale.set((0.8 + 0.4 * mouthWide) * (e === 'happy' ? 1.15 : 1), 0.12 + mouthOpen * 0.9 / Math.max(mouthWide, 0.8), 0.35);
   else if (e === 'surprised') chr.mouth.scale.set(0.5, 0.6, 0.35);
   if (restSmile) chr.smileMouth.scale.set(restSmile, restSmile * 0.9, 1);
-  // spatial voice
+  // 声はミナの口元から聞こえる
   if (panner) {
-    const L = actx.listener, cp = camPos, fw = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
+    const L = actx.listener, fw = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
     camera.getWorldDirection(fw);
-    if (L.positionX) { L.positionX.value = cp.x; L.positionY.value = cp.y; L.positionZ.value = cp.z; L.forwardX.value = fw.x; L.forwardY.value = fw.y; L.forwardZ.value = fw.z; L.upX.value = up.x; L.upY.value = up.y; L.upZ.value = up.z; }
-    else { L.setPosition(cp.x, cp.y, cp.z); L.setOrientation(fw.x, fw.y, fw.z, up.x, up.y, up.z); }
+    if (L.positionX) { L.positionX.value = camPos.x; L.positionY.value = camPos.y; L.positionZ.value = camPos.z; L.forwardX.value = fw.x; L.forwardY.value = fw.y; L.forwardZ.value = fw.z; L.upX.value = up.x; L.upY.value = up.y; L.upZ.value = up.z; }
+    else { L.setPosition(camPos.x, camPos.y, camPos.z); L.setOrientation(fw.x, fw.y, fw.z, up.x, up.y, up.z); }
     panner.positionX.value = headPos.x; panner.positionY.value = headPos.y; panner.positionZ.value = headPos.z;
   }
-  // bubble
-  chr.bubble.lookAt(camPos);
-  if (bubbleClearAt && t > bubbleClearAt && !playing.size) { bubbleClearAt = 0; bubbleText = ''; userText = ''; drawBubble(); }
+  // 状態表示
+  if (live.ready) {
+    if (speaking) pill(`${charName()}が話しています`, 'talking');
+    else if (!muted && micLevel > 0.02) pill('聞いています…', 'on');
+    else pill(muted ? 'マイクOFF・文字で話せます' : '会話中', 'on');
+  }
+  const ring = document.querySelector('#mic .ring'); const lv = muted ? 0 : Math.min(1, micLevel * 12);
+  ring.style.opacity = lv > 0.08 ? 0.3 + lv * 0.7 : 0; ring.style.transform = `scale(${1 + lv * 0.25})`;
+}
+function updateDrinks(dt) {
+  for (let i = deliveries.length - 1; i >= 0; i--) {
+    const d = deliveries[i]; d.t -= dt;
+    if (d.t <= 0) {
+      deliveries.splice(i, 1); placeDrink(d.who, d.name);
+      if (d.who === 'mina') live.sendText(`（あなたが頼んだ${d.name}が届いた）`);
+      else { toast(`${d.name}が届きました`); live.sendText(`（プレイヤーの${d.name}が届いた）`); }
+    }
+  }
+  for (const who of ['mina', 'player']) { const dr = drinks[who]; if (dr && dr.userData.grow < 1) { dr.userData.grow = Math.min(1, dr.userData.grow + dt * 2.5); dr.scale.setScalar(THREE.MathUtils.smoothstep(dr.userData.grow, 0, 1)); } }
+  if (drinks.player && Math.random() < dt / 90) setLevel(drinks.player, drinks.player.userData.level - 0.1); // 自分のカップも少しずつ減っていく
 }
 
-window.__vrc = { live, tools, chr, items, pat: s => { deskPat = s; }, startHandHold, endHandHold }; // for debugging in the console
+window.__vrc = { live, tools, chr, drinks, deliver, applyTime, pat: s => { deskPat = s; } };
 
-// ---------- loop ----------
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
   const dt = Math.min(clock.getDelta(), 0.05), t = performance.now() / 1000;
-  handleGamepads(dt); desktopMove(dt);
-  updateCharacter(dt, t); updateItems(dt);
+  if (!renderer.xr.isPresenting) camera.rotation.set(pitch, yaw, 0);
+  updateCharacter(dt, t); updateDrinks(dt);
   renderer.render(scene, camera);
 });
 </script>
