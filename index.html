@@ -90,7 +90,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.xr.enabled = true;
 renderer.xr.setReferenceSpaceType('local-floor');
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = false; // Quest 2の負荷を下げるため影なし
 document.body.appendChild(renderer.domElement);
 document.body.appendChild(VRButton.createButton(renderer));
 
@@ -189,7 +189,7 @@ function describeItem(it) {
 const chr = { state: 'idle', target: null, onArrive: null, holding: null, offering: false, offerT: 0,
   expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, walkPhase: 0, lean: 0, lastTouch: 0 };
 {
-  const skin = std(0xffe0cc, { roughness: 0.6 }), hairM = std(0x5b3a6e, { roughness: 0.7, side: THREE.DoubleSide });
+  const skin = std(0xffe0cc, { roughness: 0.6 }), hairM = std(0x16151a, { roughness: 0.5, side: THREE.DoubleSide }); // 黒髪
   const cloth = std(0xf7f3ff), skirtM = std(0x6c8ee8), dark = new THREE.MeshBasicMaterial({ color: 0x2a1d33 });
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.6), skin); leg.position.set(sx * 0.07, 0.3, 0); body.add(leg);
@@ -209,7 +209,7 @@ const chr = { state: 'idle', target: null, onArrive: null, holding: null, offeri
   const head = new THREE.Group(); head.position.y = 0.13; headPivot.add(head);
   head.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 24), skin));
   const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.45), hairM); hairTop.position.y = 0.01; head.add(hairTop);
-  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.178, 32, 16, Math.PI, Math.PI, 0, Math.PI * 0.85), hairM); hairBack.scale.set(1, 1.35, 1); hairBack.position.y = -0.06; head.add(hairBack);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 16, Math.PI, Math.PI, 0, Math.PI * 0.64), hairM); hairBack.scale.set(1.04, 1.02, 1.06); hairBack.position.y = -0.005; head.add(hairBack); // ショートカット
   const eyes = [], brows = [], blush = [];
   for (const sx of [-1, 1]) {
     const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12), dark); e.scale.set(0.8, 1.15, 0.45); e.position.set(sx * 0.055, -0.005, 0.148); head.add(e); eyes.push(e);
@@ -232,6 +232,7 @@ const chr = { state: 'idle', target: null, onArrive: null, holding: null, offeri
 }
 let bubbleText = '', userText = '', bubbleClearAt = 0, connState = '未接続';
 function drawBubble() {
+  chr.bubble.visible = false; return; // 吹き出しは表示しない（会話テンポ優先）
   const c = chr.bubbleCanvas, g = c.getContext('2d');
   g.clearRect(0, 0, c.width, c.height);
   const lines = [];
@@ -309,10 +310,10 @@ const toolDecls = [
 
 function systemPrompt() {
   const name = $('name').value || 'ミナ';
-  const past = memory.slice(-30).join('\n');
+  const past = memory.slice(-16).join('\n');
   return `あなたは「${name}」。VR空間の小さな庭に住んでいるキャラクターで、プレイヤーとマイク越しに音声で会話している。
 【性格】${$('persona').value}
-【話し方】日本語の自然な話し言葉。1〜3文で短く返す。ときどき「えっと」「んー」などのフィラーを混ぜてよい。説明口調や箇条書きは禁止。
+【話し方】日本語の自然な話し言葉。返事は1〜2文で短く、間を空けずにすぐ返す。「えっと」などのつなぎ言葉は使わない。説明口調や箇条書きは禁止。
 【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。頼まれた物の呼び方が少し違っても、周りの物の中で一番近いものだと判断して、聞き返さずにすぐ動く。
 【周りの物】${items.map(i => i.name + (i.heavy ? '（重い）' : '')).join('、')}。位置が分からなければ look_around。
 【注意】「（ ）」で囲まれた文はゲームからの状況通知で、プレイヤーの発言ではない。それに自然に反応する。
@@ -384,7 +385,7 @@ const live = {
       };
       if (this.fast) {
         // 速度優先: 話し終わりを早めに判定する
-        setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 350 } };
+        setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 300 } };
       }
       ws.send(JSON.stringify({ setup }));
     };
