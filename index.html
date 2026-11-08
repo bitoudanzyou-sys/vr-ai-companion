@@ -67,6 +67,32 @@
   #settings .row { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
   #log { font-size:12px; color:var(--muted); margin-top:10px; max-height:150px; overflow:auto; white-space:pre-wrap; background:rgba(0,0,0,.25); border-radius:10px; padding:8px; }
   .note { font-size:12px; color:var(--muted); line-height:1.6; margin-top:10px; }
+  #topLeft { display:flex; gap:8px; align-items:center; }
+  #placeTag { padding:7px 14px; border-radius:999px; font-size:13px; color:var(--accent); }
+  #storyBtn.glow { animation:glow 1.6s infinite; }
+  @keyframes glow { 50% { box-shadow:0 0 0 6px rgba(232,185,128,.22); background:rgba(232,185,128,.32); } }
+  #storyBox { position:fixed; left:50%; bottom:88px; transform:translateX(-50%); width:min(620px, calc(100vw - 24px)); padding:18px 20px; border-radius:18px; z-index:12; display:none; }
+  #storyBox.open { display:block; }
+  #storyTitle { font-size:12px; color:var(--accent); letter-spacing:.15em; margin-bottom:8px; }
+  #storyNarr { font-size:15px; line-height:1.85; }
+  #storyLine { font-size:13px; color:var(--muted); margin-top:6px; }
+  #choices { display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+  #choices button { border-radius:12px; text-align:left; padding:11px 14px; }
+  #map { position:fixed; inset:0; z-index:40; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+  #map.open { display:flex; }
+  #map .card { width:min(640px, calc(100vw - 24px)); padding:18px; border-radius:18px; }
+  #map h2 { margin:0 0 10px; font-size:17px; font-weight:500; letter-spacing:.1em; }
+  #mapArea { position:relative; aspect-ratio:16/10; border-radius:14px; overflow:hidden; background:#efe6d6; }
+  #mapArea svg { position:absolute; inset:0; width:100%; height:100%; }
+  #mapArea button { position:absolute; transform:translate(-50%,-50%); background:#2a221c; color:#f3ece3; border:none; font-size:13px; padding:7px 13px; white-space:nowrap; }
+  #mapArea button.here { background:var(--accent); color:#2a1d10; }
+  #mapArea button.locked { opacity:.35; }
+  #mapArea .ev { color:var(--accent); margin-left:4px; }
+  #mapArea button.here .ev { color:#7a3b10; }
+  #rel { margin-top:12px; font-size:13px; color:var(--muted); letter-spacing:.05em; }
+  #map .row { display:flex; justify-content:flex-end; margin-top:10px; }
+  #fade { position:fixed; inset:0; background:#000; opacity:0; transition:opacity .45s; pointer-events:none; z-index:50; }
+  #fade.on { opacity:1; }
   #toast { position:fixed; left:50%; bottom:86px; transform:translateX(-50%); padding:8px 14px; border-radius:999px; font-size:13px; z-index:11; opacity:0; transition:opacity .3s; pointer-events:none; }
   #toast.show { opacity:1; }
   #VRButton { top:70px !important; bottom:auto !important; left:14px !important; width:auto !important; padding:8px 14px !important; font-size:12px !important; }
@@ -94,7 +120,7 @@
 </div>
 
 <div id="top">
-  <div id="pill" class="glass"><span class="dot"></span><span id="pillText">準備中</span></div>
+  <div id="topLeft"><div id="pill" class="glass"><span class="dot"></span><span id="pillText">準備中</span></div><div id="placeTag" class="glass">カフェ</div></div>
   <div id="topRight" class="glass">
     <label><span>時間</span>
       <select id="timeSel">
@@ -112,9 +138,24 @@
   </button>
   <input id="msg" placeholder="声で話すか、ここに文字で書いてください" autocomplete="off">
   <button id="send">送る</button>
+  <button id="mapBtn">地図</button>
+  <button id="storyBtn" style="display:none">物語</button>
   <button id="orderBtn">注文<span>する</span></button>
 </div>
 <div id="toast" class="glass"></div>
+<div id="storyBox" class="glass"><div id="storyTitle"></div><div id="storyNarr"></div><div id="storyLine"></div><div id="choices"></div></div>
+<div id="map"><div class="card glass">
+  <h2>街の地図</h2>
+  <div id="mapArea"><svg viewBox="0 0 160 100" preserveAspectRatio="none">
+    <path d="M0 74 C40 70 70 92 110 86 S150 92 160 90 L160 100 L0 100 Z" fill="#9cc3d9"/>
+    <ellipse cx="112" cy="22" rx="26" ry="15" fill="#b9d3a0"/><ellipse cx="104" cy="25" rx="6" ry="4" fill="#9cc3d9"/>
+    <g stroke="#cdbfa8" stroke-width="3" fill="none"><path d="M0 40 H160"/><path d="M70 0 V100"/><path d="M10 0 L50 100"/><path d="M100 40 L120 100"/></g>
+    <rect x="88" y="60" width="26" height="9" fill="#b7b0a6"/><rect x="28" y="54" width="30" height="5" fill="#d9b48a"/>
+  </svg></div>
+  <div id="rel"></div>
+  <div class="row"><button id="closeMap">閉じる</button></div>
+</div></div>
+<div id="fade"></div>
 
 <div id="order" class="glass">
   <h3>メニュー</h3>
@@ -151,6 +192,7 @@
 <script type="module">
 import * as THREE from 'three';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ================= 設定・記憶 =================
 const $ = id => document.getElementById(id);
@@ -194,9 +236,13 @@ const canvasTex = (w, h, draw, rx = 1, ry = 1) => {
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rx, ry); tx.anisotropy = 4; return tx;
 };
 let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-const add = (geo, mat, x, y, z, parent = scene) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
+const groups = { cafe: new THREE.Group(), street: new THREE.Group(), park: new THREE.Group(), station: new THREE.Group(), river: new THREE.Group() };
+for (const g of Object.values(groups)) scene.add(g);
+let P = scene, LOCS = {}, curLoc = store.get('loc', 'cafe');
+const add = (geo, mat, x, y, z, parent = P) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
 
 // ================= カフェ =================
+P = groups.cafe;
 const ROOM = { x0: -3.4, x1: 3.4, z0: -1.9, z1: 4.6, h: 3.0 };
 const lights = {};
 {
@@ -244,8 +290,8 @@ const lights = {};
   const streetCanvas = document.createElement('canvas'); streetCanvas.width = 1400; streetCanvas.height = 700;
   const streetTex = new THREE.CanvasTexture(streetCanvas); streetTex.colorSpace = THREE.SRGBColorSpace;
   const outside = add(new THREE.PlaneGeometry(12, 6), new THREE.MeshBasicMaterial({ map: streetTex }), 0, 1.75, backZ - 2.6);
-  lights.paintStreet = mode => {
-    const g = streetCanvas.getContext('2d'), w = streetCanvas.width, h = streetCanvas.height; seed = 42;
+  const paintCity = (cv, mode) => {
+    const g = cv.getContext('2d'), w = cv.width, h = cv.height; seed = 42;
     const P = {
       day: { sky: ['#8ec1ec', '#d8ebf6'], bld: ['#c9c2b8', '#b7b1a8', '#d6d0c4', '#a9a49c'], win: 'rgba(120,150,175,.55)', lit: 0, road: '#77736d', walk: '#b8b0a3', tree: '#4f7d45', ink: '#2c2a28', glow: 0 },
       evening: { sky: ['#5a6a9c', '#f3a874'], bld: ['#8a7a78', '#7a6c6c', '#9a8a84', '#6d6262'], win: 'rgba(90,90,110,.6)', lit: 0.35, road: '#5d5654', walk: '#8c8078', tree: '#3d5a3a', ink: '#24201f', glow: 0.5 },
@@ -287,8 +333,9 @@ const lights = {};
       g.fillStyle = P.ink; g.fillRect(lx, h * 0.5, 6, h * 0.33); g.fillRect(lx - 24, h * 0.5, 30, 5);
       if (P.glow) { const rg = g.createRadialGradient(lx - 22, h * 0.51, 2, lx - 22, h * 0.51, 70); rg.addColorStop(0, `rgba(255,220,150,${0.9 * P.glow})`); rg.addColorStop(1, 'rgba(255,220,150,0)'); g.fillStyle = rg; g.fillRect(lx - 100, h * 0.51 - 80, 160, 160); }
     }
-    streetTex.needsUpdate = true;
   };
+  lights.paintCity = paintCity;
+  lights.paintStreet = mode => { paintCity(streetCanvas, mode); streetTex.needsUpdate = true; };
 
   // 照明
   lights.hemi = new THREE.HemisphereLight(0xfff6ea, 0x6b5240, 0.9); scene.add(lights.hemi);
@@ -299,7 +346,7 @@ const lights = {};
     add(new THREE.CylinderGeometry(0.004, 0.004, ROOM.h - y - 0.12), basic(0x111111), x, (ROOM.h + y) / 2 + 0.06, z);
     add(new THREE.ConeGeometry(0.17, 0.16, 24, 1, true), shadeM, x, y, z);
     const bulb = add(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff2d6, emissive: 0xffd9a0, emissiveIntensity: 1.5 }), x, y - 0.07, z);
-    const pl = new THREE.PointLight(0xffc98a, 0.8, 5.5, 1.6); pl.position.set(x, y - 0.12, z); scene.add(pl);
+    const pl = new THREE.PointLight(0xffc98a, 0.8, 5.5, 1.6); pl.position.set(x, y - 0.12, z); P.add(pl);
     lights.pendants.push({ pl, bulb });
   }
 
@@ -360,23 +407,271 @@ const lights = {};
   }
 }
 
+P = scene;
+// ================= 街の場所（カフェ以外） =================
+// 建物・道路・街灯などの3Dモデルは Kenney（kenney.nl）のCC0素材を使用（assets/ 以下、ライセンスは assets/LICENSE-*.txt）
+const gltfLoader = new GLTFLoader(), glbCache = {};
+function model(path, x, y, z, rotY = 0, s = 1, parent = P) {
+  const holder = new THREE.Group(); holder.position.set(x, y, z); holder.rotation.y = rotY; holder.scale.setScalar(s); parent.add(holder);
+  (glbCache[path] ||= new Promise(res => gltfLoader.load('assets/' + path, g => res(g.scene), undefined, () => { console.warn('モデルを読み込めません', path); res(null); })))
+    .then(src => { if (src) holder.add(src.clone(true)); });
+  return holder;
+}
+const pick = arr => arr[Math.floor(rnd() * arr.length)];
+const SHOPS = ['kc/building-a.glb', 'kc/building-b.glb', 'kc/building-c.glb', 'kc/building-d.glb', 'kc/building-e.glb', 'kc/building-g.glb', 'kc/building-h.glb', 'kc/building-k.glb'];
+const LOWS = ['kc/low-detail-building-a.glb', 'kc/low-detail-building-b.glb', 'kc/low-detail-building-c.glb', 'kc/low-detail-building-d.glb', 'kc/low-detail-building-wide-a.glb'];
+const TOWERS = ['kc/building-skyscraper-a.glb', 'kc/building-skyscraper-b.glb'];
+const HOUSES = ['ks/house_type01.glb', 'ks/house_type02.glb', 'ks/house_type04.glb', 'ks/house_type07.glb', 'ks/house_type10.glb', 'ks/house_type13.glb'];
+const lamps = []; // 夕方・夜に点く街灯 {pl, on, bulb}
+const backdrops = []; // 遠景の街並み {cv, tex, force}
+function makeBackdrop(w, h, x, y, z, rotY = 0, force = null) {
+  const cv = document.createElement('canvas'); cv.width = 1400; cv.height = 700;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = add(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, fog: false }), x, y, z); m.rotation.y = rotY;
+  backdrops.push({ cv, tex, force }); return m;
+}
+function streetLamp(x, z, h = 3.2, on = 1.4) {
+  const dark = std(0x26262a, { metalness: 0.4, roughness: 0.5 });
+  add(new THREE.CylinderGeometry(0.05, 0.07, h), dark, x, h / 2, z);
+  const bulb = add(new THREE.SphereGeometry(0.13, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: 0xffd28a, emissiveIntensity: 0.2 }), x, h + 0.1, z);
+  const pl = new THREE.PointLight(0xffc98a, 0, 9, 1.5); pl.position.set(x, h, z); P.add(pl);
+  lamps.push({ pl, on, bulb });
+}
+const signTex = (word, bg, fg = '#fff') => canvasTex(128, 384, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; g.font = 'bold 84px serif'; const cs = [...word]; const step = Math.min(110, (h - 40) / cs.length); cs.forEach((c, i) => g.fillText(c, 22, 100 + i * step)); });
+const tileTex = (base, line, rx, ry) => canvasTex(256, 256, (g, w, h) => { g.fillStyle = base; g.fillRect(0, 0, w, h); g.strokeStyle = line; g.lineWidth = 3; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, h); g.stroke(); } for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 3, 3); } }, rx, ry);
+const groundPlane = (tex, w, d, z = 0) => { const m = add(new THREE.PlaneGeometry(w, d), std(0xffffff, { map: tex, roughness: 0.9 }), 0, 0, z); m.rotation.x = -Math.PI / 2; return m; };
+const tree = (x, z, s = 1, col = 0x4f7d45) => { add(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 1.6 * s), std(0x5a4030), x, 0.8 * s, z); const lm = std(col, { roughness: 0.8 }); for (let i = 0; i < 6; i++) add(new THREE.SphereGeometry((0.55 + rnd() * 0.35) * s, 10, 8), lm, x + (rnd() - .5) * 0.9 * s, (1.9 + rnd() * 0.9) * s, z + (rnd() - .5) * 0.9 * s); };
+
+// --- 商店街 ---
+P = groups.street;
+{
+  groundPlane(tileTex('#8f877c', '#7a7268', 6, 30), 8, 46, -18);
+  const words = ['喫茶', '古道具', '雑貨', 'パン', '花', '古本', '八百屋', '定食', '銭湯', '酒店', '和菓子', '金物'];
+  const facade = [0xd8cbb6, 0xb9a58a, 0xe6ddd0, 0x9c8a74, 0xc9b9a0, 0xa8b0a8];
+  const awnColors = ['#b8433a', '#2e5c8a', '#3d7a52', '#c7922e', '#6b4a7a'];
+  let wi = 0;
+  for (const side of [-1, 1]) for (let i = 0; i < 9; i++) {
+    const z = 2 - i * 4.2, hgt = 5 + rnd() * 3, x = side * 4.6;
+    add(new THREE.BoxGeometry(3, hgt, 4), std(facade[Math.floor(rnd() * facade.length)], { roughness: 0.9 }), x, hgt / 2, z);
+    const glassM = new THREE.MeshStandardMaterial({ color: 0x9fb6c4, emissive: 0xffd9a0, emissiveIntensity: 0.15, roughness: 0.2 });
+    const win = add(new THREE.PlaneGeometry(3.2, 2.1), glassM, side * 3.09, 1.2, z); win.rotation.y = -side * Math.PI / 2; win.userData.shop = true;
+    const ac = awnColors[Math.floor(rnd() * awnColors.length)];
+    const awn = add(new THREE.BoxGeometry(1.1, 0.05, 3.6), std(0xffffff, { map: canvasTex(64, 64, (g) => { for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f1ece2' : ac; g.fillRect(k * 8, 0, 8, 64); } }, 1, 1) }), side * 2.6, 2.55, z); awn.rotation.z = side * 0.35;
+    const sg = add(new THREE.PlaneGeometry(0.5, 1.5), new THREE.MeshStandardMaterial({ map: signTex(words[wi++ % words.length], ac), emissive: 0xffffff, emissiveIntensity: 0.1 }), side * 3.06, 3.5, z + 1.6); sg.rotation.y = -side * Math.PI / 2;
+    for (let f = 0; f < Math.floor(hgt / 2) - 1; f++) { const uw = add(new THREE.PlaneGeometry(2.2, 0.9), new THREE.MeshStandardMaterial({ color: 0x7d8fa0, emissive: 0xffd28a, emissiveIntensity: 0 }), side * 3.09, 4.2 + f * 1.8, z); uw.rotation.y = -side * Math.PI / 2; uw.userData.upper = true; }
+  }
+  // 頭上の提灯と電線
+  for (let i = 0; i < 6; i++) {
+    const z = 1 - i * 6;
+    const wire = add(new THREE.CylinderGeometry(0.01, 0.01, 6.2), std(0x222222), 0, 3.9, z); wire.rotation.z = Math.PI / 2;
+    for (let k = -2; k <= 2; k++) add(new THREE.SphereGeometry(0.16, 12, 10), new THREE.MeshStandardMaterial({ color: 0xd8402e, emissive: 0xff5a30, emissiveIntensity: 0.25, roughness: 0.6 }), k * 1.1, 3.7, z).userData.lantern = true;
+  }
+  for (let i = 0; i < 4; i++) streetLamp(i % 2 ? 2.4 : -2.4, -2 - i * 8, 3.4, 1.2);
+  makeBackdrop(40, 20, 0, 6, -44);
+  for (const side of [-1, 1]) for (let z = 2; z > -40; z -= 6) model(pick(SHOPS), side * 9.5, 0, z, -side * Math.PI / 2, 5.5);
+  for (const side of [-1, 1]) for (let z = -1; z > -36; z -= 9) model('kr/electricity-pole.glb', side * 2.75, 0, z, side > 0 ? Math.PI / 2 : -Math.PI / 2, 7.5);
+  for (let z = -10; z > -40; z -= 10) model(pick(TOWERS), (rnd() - 0.5) * 14, 0, z - 14, 0, 6);
+  for (const side of [-1, 1]) for (let i = 0; i < 3; i++) { const b = add(new THREE.BoxGeometry(0.5, 0.9, 0.5), std(0x8a5a3a), side * 2.2, 0.45, -6 - i * 9); } // 店先の木箱
+}
+
+// --- 公園 ---
+P = groups.park;
+{
+  groundPlane(canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6f9a58'; g.fillRect(0, 0, w, h); for (let i = 0; i < 1500; i++) { g.fillStyle = rnd() < .5 ? 'rgba(40,80,30,.25)' : 'rgba(160,200,120,.2)'; g.fillRect(rnd() * w, rnd() * h, 2, 4); } }, 12, 12), 60, 60, -10);
+  const path = add(new THREE.PlaneGeometry(2.2, 40), std(0xc9b48a, { roughness: 1 }), 0, 0.01, -5); path.rotation.x = -Math.PI / 2;
+  const wood = std(0x8a5a38, { roughness: 0.6 }), iron = std(0x26262a, { metalness: 0.4, roughness: 0.5 });
+  add(new THREE.BoxGeometry(1.7, 0.05, 0.42), wood, 0, 0.45, -0.05); // ベンチの座面
+  add(new THREE.BoxGeometry(1.7, 0.3, 0.04), wood, 0, 0.72, -0.28); // 背もたれ
+  for (const sx of [-0.75, 0.75]) { add(new THREE.BoxGeometry(0.05, 0.45, 0.4), iron, sx, 0.225, -0.05); add(new THREE.BoxGeometry(0.05, 0.4, 0.04), iron, sx, 0.65, -0.28); }
+  const pond = add(new THREE.CircleGeometry(3.4, 40), new THREE.MeshStandardMaterial({ color: 0x41708a, roughness: 0.1, metalness: 0.3 }), -4.5, 0.02, -5); pond.rotation.x = -Math.PI / 2;
+  for (let i = 0; i < 22; i++) { const a = rnd() * Math.PI * 2, r = 7 + rnd() * 12; tree(Math.cos(a) * r, -6 + Math.sin(a) * r, 0.9 + rnd() * 0.6, [0x4f7d45, 0x5c8a3e, 0x3f6b3a][i % 3]); }
+  tree(2.6, -1.5, 1.2); tree(-2.4, -2.4, 1.1);
+  for (let i = 0; i < 14; i++) model(rnd() < 0.6 ? 'ks/tree_large.glb' : 'ks/tree_small.glb', (rnd() - 0.5) * 30, 0, -8 - rnd() * 14, rnd() * 6, 5 + rnd() * 2);
+  for (let x = -18; x <= 18; x += 7.5) model(pick(HOUSES), x, 0, -24, 0, 6);
+  streetLamp(1.4, -0.6, 3, 1.1); streetLamp(-1.6, -9, 3, 1.1);
+  makeBackdrop(80, 30, 0, 9, -34);
+}
+
+// --- 駅前 ---
+P = groups.station;
+{
+  groundPlane(tileTex('#b5aea4', '#9d968c', 10, 10), 40, 40, -8);
+  const bodyM = std(0xd9d6cf, { roughness: 0.8 }), glassM = new THREE.MeshStandardMaterial({ color: 0x8fa6b8, emissive: 0xfff0c8, emissiveIntensity: 0.1, roughness: 0.15 });
+  add(new THREE.BoxGeometry(18, 7, 5), bodyM, 0, 3.5, -12);
+  const gl = add(new THREE.PlaneGeometry(7, 3.2), glassM, 0, 1.6, -9.49); gl.userData.shop = true;
+  add(new THREE.BoxGeometry(9, 0.2, 2.4), std(0x4a4a50), 0, 3.4, -8.6); // ひさし
+  const nameTex = canvasTex(1024, 192, (g, w, h) => { g.fillStyle = '#1e3d6b'; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.font = 'bold 96px sans-serif'; g.fillText('みなと台駅', 60, 112); g.font = '40px sans-serif'; g.fillText('MINATODAI  STATION', 560, 160); });
+  add(new THREE.PlaneGeometry(6.4, 1.2), new THREE.MeshStandardMaterial({ map: nameTex, emissive: 0xffffff, emissiveMap: nameTex, emissiveIntensity: 0.3 }), 0, 5.3, -9.48);
+  const clock = add(new THREE.CircleGeometry(0.55, 32), std(0xf6f2ea), 5.5, 5.3, -9.47);
+  const hand1 = add(new THREE.BoxGeometry(0.04, 0.4, 0.01), basic(0x111111), 5.5, 5.42, -9.45), hand2 = add(new THREE.BoxGeometry(0.03, 0.3, 0.01), basic(0x111111), 5.5, 5.3, -9.45); hand2.rotation.z = -Math.PI / 2; hand2.position.x += 0.15;
+  // バス停と植え込み
+  add(new THREE.BoxGeometry(2.4, 0.08, 1), std(0x3a3a40), 4.2, 2.4, -3.5); add(new THREE.BoxGeometry(0.06, 2.4, 0.06), std(0x3a3a40), 3.1, 1.2, -3.1); add(new THREE.BoxGeometry(0.06, 2.4, 0.06), std(0x3a3a40), 5.3, 1.2, -3.1);
+  add(new THREE.BoxGeometry(2.2, 0.06, 0.4), std(0x8a5a38), 4.2, 0.45, -3.8);
+  for (const x of [-5, -2.5]) { add(new THREE.BoxGeometry(1.4, 0.5, 1.4), std(0x9a948a), x, 0.25, -3); tree(x, -3, 0.8); }
+  for (let x = -22; x <= 22; x += 4) model(x === 2 ? 'kr/road-crossing.glb' : 'kr/road-straight.glb', x, 0.015, -7, Math.PI / 2, 4);
+  model('kr/traffic-light.glb', -2.2, 0, -4.8, Math.PI, 6); model('kr/traffic-light.glb', 6.2, 0, -9.2, 0, 6);
+  for (let x = -26; x <= 26; x += 6.5) if (Math.abs(x) > 9) model(pick(SHOPS), x, 0, -13, 0, 6);
+  for (let x = -20; x <= 20; x += 8) model(pick(TOWERS), x + rnd() * 3, 0, -24, 0, 7);
+  streetLamp(-3.6, -1.5, 4, 1.6); streetLamp(3.6, -1.5, 4, 1.6);
+  model('kr/light-square.glb', -8, 0, -4.6, Math.PI, 6.5); model('kr/light-square.glb', 8, 0, -4.6, Math.PI, 6.5);
+  makeBackdrop(80, 30, 0, 10, -30);
+}
+
+// --- 川沿い ---
+P = groups.river;
+{
+  groundPlane(tileTex('#7a746c', '#66605a', 16, 3), 50, 6, 0.5);
+  const water = add(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x0f2236, roughness: 0.05, metalness: 0.6, map: canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#16304a'; g.fillRect(0, 0, w, h); for (let i = 0; i < 260; i++) { g.fillStyle = `rgba(255,${200 + rnd() * 50},${120 + rnd() * 80},${rnd() * 0.5})`; g.fillRect(rnd() * w, rnd() * h, 6 + rnd() * 30, 1.5); } }, 2, 2), emissive: 0xffffff, emissiveIntensity: 0.15 }), 0, -0.6, -22);
+  water.rotation.x = -Math.PI / 2; water.material.emissiveMap = water.material.map;
+  const iron = std(0x2b2d33, { metalness: 0.5, roughness: 0.4 });
+  add(new THREE.BoxGeometry(50, 0.06, 0.06), iron, 0, 1.05, -2.3); add(new THREE.BoxGeometry(50, 0.04, 0.04), iron, 0, 0.6, -2.3);
+  for (let x = -24; x <= 24; x += 1.6) add(new THREE.BoxGeometry(0.06, 1.05, 0.06), iron, x, 0.52, -2.3);
+  add(new THREE.BoxGeometry(50, 0.6, 0.4), std(0x6a645c), 0, -0.3, -2.5); // 護岸
+  for (let x = -30; x <= 30; x += 4) model('kr/road-bridge.glb', x, 2.2, -24, Math.PI / 2, 4);
+  for (let x = -28; x <= 28; x += 2.5) add(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: 0xfff1d0, emissive: 0xffd28a, emissiveIntensity: 2 }), x, 4.5, -22.8);
+  add(new THREE.SphereGeometry(1.2, 20, 14), new THREE.MeshBasicMaterial({ color: 0xfff6dc, fog: false }), -12, 16, -60); // 月
+  for (let i = 0; i < 6; i++) streetLamp(-12 + i * 5, 1.6, 3.2, 1.3);
+  for (let i = 0; i < 6; i++) model('ks/tree_large.glb', -15 + i * 6, 0, 2.8, rnd() * 6, 5.5);
+  makeBackdrop(120, 40, 0, 12, -45, 0, 'night');
+}
+P = scene;
+
+// ================= 場所とストーリー =================
+LOCS = {
+  cafe: { name: 'カフェ', desc: '窓際の丸テーブルに向かい合って座っている。', pose: 'sit', rest: 'table', mina: [0, -0.58, 0], cam: [0, 0.95, 1.24, -0.12], map: [44, 42] },
+  street: { name: '商店街', desc: '古い商店が並ぶ小さな商店街を、並んで歩いている途中。提灯が頭上に揺れている。', pose: 'stand', rest: 'side', mina: [0, 0.6, 0], cam: [0, 2.7, 1.62, -0.05], map: [24, 60] },
+  park: { name: '公園', desc: '池のある公園。ベンチにあなたが座り、プレイヤーはその前に立っている。', pose: 'sit', rest: 'lap', mina: [0, -0.06, 0], cam: [0, 1.9, 1.55, -0.2], map: [70, 22] },
+  station: { name: 'みなと台駅前', desc: '駅前の広場。改札の前、時計の下で向かい合って立っている。', pose: 'stand', rest: 'side', mina: [0, 0.4, 0], cam: [0, 2.5, 1.62, -0.05], map: [62, 70] },
+  river: { name: '川沿い', desc: '夜の川沿いの遊歩道。手すりの向こうで、水面に街の灯りが揺れている。', pose: 'stand', rest: 'side', mina: [0.2, -1.6, 0], cam: [0, 0.55, 1.62, -0.05], map: [86, 82], time: 'night' },
+};
+const STORY = {
+  c1: { loc: 'cafe', title: '第1話　窓際の約束', narr: 'カップが半分くらい空いたころ、ミナがスマホの画面をこちらに向けた。',
+    mina: '最近見つけた商店街の小さなお店が気になっていて、一緒に行ってみない？と誘う',
+    choices: [
+      { t: 'いいね、行ってみよう', aff: 2, react: 'プレイヤーは乗り気で、行ってみようと言った。うれしそうに反応する' },
+      { t: 'どんなお店なの？', aff: 1, react: 'プレイヤーはどんなお店か聞いた。少しだけお店のことを話して、あらためて誘う' },
+      { t: '今日はここでゆっくりしたいな', aff: 0, react: 'プレイヤーは今日はここでゆっくりしたいと言った。少し残念そうだけど、わかった、じゃあ今度ね、と受け止める' },
+    ], unlock: ['street'], next: 'c2' },
+  c2: { loc: 'street', title: '第2話　古道具屋のオルゴール', narr: '商店街の端に、古い雑貨やレコードが並ぶ小さな店があった。ミナは店先の木のオルゴールの前で足を止めた。',
+    mina: '小さなオルゴールを手に取って、ネジを巻いたときの音がなんだか懐かしいと話す',
+    choices: [
+      { t: 'それ、プレゼントさせて', aff: 2, flag: 'musicbox', react: 'プレイヤーがオルゴールをプレゼントすると言った。驚いて、照れながら受け取る' },
+      { t: '似合いそうだね', aff: 1, react: 'プレイヤーが「似合いそう」と言った。少し照れて笑う' },
+      { t: 'そろそろ次に行こうか', aff: -1, react: 'プレイヤーは先に進もうと言った。名残惜しそうにオルゴールを棚に戻す' },
+    ], unlock: ['park'], next: 'c3' },
+  c3: { loc: 'park', title: '第3話　ベンチの話', narr: '公園のベンチ。ミナはしばらく黙って池を眺めていた。',
+    mina: '最近仕事で少し疲れていて、うまく言葉にできないけど、こうしてぼーっとできる時間がありがたいと打ち明ける',
+    choices: [
+      { t: 'うん、ゆっくり聞かせて', aff: 2, react: 'プレイヤーは急かさず、ゆっくり聞かせてと言った。安心して、少しずつ話す' },
+      { t: '無理しないでね', aff: 1, react: 'プレイヤーは無理しないでと気遣った。ありがとうと微笑む' },
+      { t: 'こうしたら楽になるかも', aff: 0, react: 'プレイヤーは解決策を提案した。ありがたく受け取りつつ、今は聞いてほしかっただけかも、と正直に少し笑う' },
+    ], unlock: ['station'], next: 'c4' },
+  c4: { loc: 'station', title: '第4話　改札の前で', narr: '駅前の時計が六時を回った。改札の前で、ミナは少しだけ立ち止まった。',
+    mina: '今日は楽しかった、でももう少しだけ歩きたい気もする、と遠回しに言う',
+    choices: [
+      { t: '川沿い、少し歩こうか', aff: 2, react: 'プレイヤーが川沿いを歩こうと誘った。うれしそうにうなずく' },
+      { t: '送っていくよ', aff: 1, react: 'プレイヤーが送っていくと言った。ありがとう、じゃあ川沿いを通って帰ろうと言う' },
+      { t: 'また明日ね', aff: 0, react: 'プレイヤーは今日はここで解散しようと言った。少し寂しそうに、でも笑って手を振り、次に会ったら川沿いを歩きたいと言う' },
+    ], unlock: ['river'], next: 'c5' },
+  c5: { loc: 'river', title: '最終話　川沿いの夜', narr: '水面に街の灯りが揺れている。ミナは手すりに手を置いて、こちらを振り返った。',
+    mina: () => story.aff >= 6 ? `今日一日を振り返って、あなたといると肩の力が抜ける、また一緒にどこかへ行きたいと素直に伝える${story.flags.includes('musicbox') ? '。オルゴールのお礼もあらためて言う' : ''}`
+      : story.aff >= 3 ? '今日は楽しかった、また誘ってもいい？と聞く' : '今日はありがとう、次はもう少しゆっくり話したいなと言う',
+    choices: [
+      { t: 'もちろん。また来よう', aff: 1, react: 'プレイヤーは「もちろん、また来よう」と答えた。安心したように笑う' },
+      { t: '（だまって手を差し出す）', aff: 2, react: 'プレイヤーは黙って手を差し出した。少し驚いて、そっと手をつなぐ', expr: 'shy' },
+    ], unlock: ['cafe', 'street', 'park', 'station', 'river'], next: 'free' },
+};
+let story = { ch: 'c1', aff: 0, flags: [], unlocked: ['cafe'], log: [] };
+try { Object.assign(story, JSON.parse(store.get('story', '{}'))); } catch {}
+const saveStory = () => store.set('story', JSON.stringify(story));
+const relText = () => story.aff >= 8 ? 'とても近い。特別な存在だと感じ始めている' : story.aff >= 5 ? '気の置けない、居心地のいい関係' : story.aff >= 2 ? '少しずつ打ち解けてきた' : 'まだ少し距離がある';
+const storyAvailable = () => story.ch !== 'free' && STORY[story.ch] && STORY[story.ch].loc === curLoc;
+function refreshStoryUI() {
+  $('storyBtn').style.display = storyAvailable() ? '' : 'none';
+  $('placeTag').textContent = LOCS[curLoc].name + (story.ch === 'free' ? '' : '　' + (STORY[story.ch].title.split('　')[0]));
+}
+let storyOpen = false;
+function openStory() {
+  if (!storyAvailable() || storyOpen) return;
+  const ev = STORY[story.ch]; storyOpen = true;
+  const intent = typeof ev.mina === 'function' ? ev.mina() : ev.mina;
+  $('storyTitle').textContent = ev.title; $('storyNarr').textContent = ev.narr;
+  $('storyLine').textContent = live.ready ? '' : `${charName()}は「${intent}」という様子だ。`;
+  $('choices').innerHTML = '';
+  ev.choices.forEach(c => { const b = document.createElement('button'); b.textContent = c.t; b.onclick = () => choose(ev, c); $('choices').appendChild(b); });
+  $('storyBox').classList.add('open'); $('storyBtn').classList.remove('glow');
+  stopPlayback();
+  live.sendText(`（ストーリー「${ev.title}」が始まった。状況：${ev.narr} この場面で、あなたは次のことを自分の言葉で1〜2文で話して：${intent}。話したら、プレイヤーの返事を待つ）`);
+}
+function choose(ev, c) {
+  $('storyBox').classList.remove('open'); storyOpen = false;
+  story.aff += c.aff || 0; if (c.flag) story.flags.push(c.flag);
+  for (const u of ev.unlock || []) if (!story.unlocked.includes(u)) story.unlocked.push(u);
+  story.log.push(`${ev.title}：プレイヤーは「${c.t}」と答えた`); story.ch = ev.next; saveStory();
+  remember(`（${ev.title}）プレイヤーは「${c.t}」と答えた`);
+  if (c.expr) setExpression(c.expr, 8); else if ((c.aff || 0) >= 2) setExpression('happy', 6); else if ((c.aff || 0) < 0) setExpression('sad', 5);
+  stopPlayback();
+  live.sendText(`（${c.react}。あなたらしく1〜2文で反応して）`);
+  refreshStoryUI();
+  setTimeout(() => {
+    if (story.ch === 'free') toast('物語はここでひと区切り。どこへでも行けます');
+    else { const nx = STORY[story.ch]; if (nx.loc !== curLoc) toast(`地図から「${LOCS[nx.loc].name}」へ行けるようになりました`); }
+  }, 2500);
+}
+function renderMap() {
+  const area = $('mapArea'); area.querySelectorAll('button').forEach(b => b.remove());
+  for (const [id, L] of Object.entries(LOCS)) {
+    const b = document.createElement('button'); const open = story.unlocked.includes(id);
+    const hasEv = story.ch !== 'free' && STORY[story.ch]?.loc === id;
+    b.innerHTML = `${L.name}${hasEv ? '<span class="ev">◆</span>' : ''}`; b.className = (id === curLoc ? 'here ' : '') + (open ? '' : 'locked');
+    b.style.left = L.map[0] + '%'; b.style.top = L.map[1] + '%'; b.disabled = !open || id === curLoc;
+    b.onclick = () => { $('map').classList.remove('open'); goTo(id); };
+    area.appendChild(b);
+  }
+  const n = Math.max(0, Math.min(5, Math.round(story.aff / 2)));
+  $('rel').textContent = `ミナとの距離　${'●'.repeat(n)}${'○'.repeat(5 - n)}`;
+}
+function goTo(id, announce = true) {
+  const L = LOCS[id]; if (!L) return;
+  $('fade').classList.add('on');
+  setTimeout(() => {
+    curLoc = id; store.set('loc', id);
+    for (const [k, g] of Object.entries(groups)) g.visible = k === id;
+    setPose(L.pose); chr.root.position.set(L.mina[0], 0, L.mina[1]); chr.root.rotation.y = L.mina[2];
+    player.position.set(L.cam[0], 0, L.cam[1]); camera.position.y = L.cam[2]; yaw = 0; pitch = L.cam[3];
+    chr.sipT = 0; chr.holdingCup = null; chr.lookOutT = 0;
+    $('orderBtn').style.display = id === 'cafe' ? '' : 'none';
+    applyTime(effTime(), false);
+    refreshStoryUI();
+    $('fade').classList.remove('on');
+    if (announce) { stopPlayback(); live.sendText(`（二人で${L.name}に移動した。${L.desc}${L.time ? '' : `時間帯は${TIME_JA[timeMode]}。`}着いたことに自然にひとこと触れて）`); }
+    if (storyAvailable()) { $('storyBtn').classList.add('glow'); setTimeout(() => toast('◆ ここで物語が進められます（「物語」ボタン）'), 900); }
+  }, 450);
+}
+
 // ================= 時間帯 =================
 let timeMode = 'day';
 function autoTime() { const h = new Date().getHours() + new Date().getMinutes() / 60; return h >= 6 && h < 16 ? 'day' : h >= 16 && h < 18.5 ? 'evening' : 'night'; }
 const TIME_JA = { day: '昼', evening: '夕方', night: '夜' };
 function applyTime(mode, announce) {
   timeMode = mode; lights.paintStreet(mode);
+  for (const b of backdrops) { lights.paintCity(b.cv, b.force || mode); b.tex.needsUpdate = true; }
+  const lampK = mode === 'day' ? 0 : mode === 'evening' ? 0.6 : 1;
+  for (const l of lamps) { l.pl.intensity = l.on * lampK * 1.6; l.bulb.material.emissiveIntensity = 0.2 + lampK * 2.2; }
+  seed = 99;
+  scene.traverse(o => { if (!o.material) return; if (o.userData.upper) o.material.emissiveIntensity = mode === 'day' ? 0 : rnd() < 0.55 ? 0.9 : 0; if (o.userData.shop) o.material.emissiveIntensity = mode === 'day' ? 0.12 : 0.85; if (o.userData.lantern) o.material.emissiveIntensity = mode === 'day' ? 0.25 : 1.5; });
   const L = { day: [0xfff6ea, 0.95, 0xeaf3ff, 1.2, 0.5, 0x2a221c], evening: [0xffd9b5, 0.62, 0xffa86a, 0.85, 1.1, 0x1e1712], night: [0xffe2c4, 0.32, 0x8090c0, 0.12, 1.7, 0x120e0b] }[mode];
   lights.hemi.color.setHex(L[0]); lights.hemi.intensity = L[1]; lights.window.color.setHex(L[2]); lights.window.intensity = L[3];
   for (const p of lights.pendants) { p.pl.intensity = L[4]; p.bulb.material.emissiveIntensity = 0.8 + L[4]; }
-  scene.background.setHex(L[5]);
+  scene.background.setHex(curLoc === 'cafe' ? L[5] : { day: 0x9cc6ea, evening: 0xe3a27c, night: 0x0b1024 }[mode]);
   if (announce) live.sendText(`（時間がたって、窓の外は${TIME_JA[mode]}になった）`);
 }
 const pickTime = () => $('timeSel').value === 'auto' ? autoTime() : $('timeSel').value;
-applyTime(pickTime(), false);
-$('timeSel').onchange = () => { store.set('time', $('timeSel').value); const m = pickTime(); if (m !== timeMode) applyTime(m, true); };
-{ const t = store.get('time', 'auto'); $('timeSel').value = t; applyTime(pickTime(), false); }
-setInterval(() => { if ($('timeSel').value === 'auto') { const m = autoTime(); if (m !== timeMode) applyTime(m, true); } }, 60000);
+const effTime = () => (LOCS[curLoc] && LOCS[curLoc].time) || pickTime();
+applyTime(effTime(), false);
+$('timeSel').onchange = () => { store.set('time', $('timeSel').value); const m = effTime(); if (m !== timeMode) applyTime(m, true); };
+{ const t = store.get('time', 'auto'); $('timeSel').value = t; applyTime(effTime(), false); }
+setInterval(() => { if ($('timeSel').value === 'auto' && !LOCS[curLoc].time) { const m = autoTime(); if (m !== timeMode) applyTime(m, true); } }, 60000);
 
 // ================= 飲み物 =================
 const DRINKS = {
@@ -430,7 +725,7 @@ function deliver(who, name, delay = 3.5) {
 }
 function placeDrink(who, name) {
   if (drinks[who]) { if (chr.holdingCup === drinks[who]) chr.holdingCup = null; drinks[who].removeFromParent(); }
-  const dr = makeDrink(name); dr.position.copy(SPOTS[who]); dr.scale.setScalar(0.01); dr.userData.grow = 0; scene.add(dr); drinks[who] = dr;
+  const dr = makeDrink(name); dr.position.copy(SPOTS[who]); dr.scale.setScalar(0.01); dr.userData.grow = 0; groups.cafe.add(dr); drinks[who] = dr;
   chime();
   return dr;
 }
@@ -446,18 +741,21 @@ const chr = { expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, 
   const texMat = (map, ei, o = {}) => new THREE.MeshStandardMaterial({ map, roughness: 0.8, emissive: 0xffffff, emissiveMap: map, emissiveIntensity: ei, ...o });
   const cloth = texMat(laceTex, 0.22), sleeve = texMat(sleeveTex, 0.22), skirtM = texMat(skirtTex, 0.16, { side: THREE.DoubleSide });
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  const seatG = new THREE.Group(), standG = new THREE.Group(), upper = new THREE.Group(); body.add(seatG, standG, upper);
   // 座った下半身
   const HIP = 0.48;
   for (const sx of [-1, 1]) {
-    const thigh = add(new THREE.CylinderGeometry(0.055, 0.048, 0.42, 12), skin, sx * 0.075, HIP, 0.2, body); thigh.rotation.x = Math.PI / 2;
-    add(new THREE.CylinderGeometry(0.044, 0.036, 0.46, 12), skin, sx * 0.075, 0.25, 0.4, body);
-    const shoe = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.43, body); shoe.rotation.x = Math.PI / 2;
+    const thigh = add(new THREE.CylinderGeometry(0.055, 0.048, 0.42, 12), skin, sx * 0.075, HIP, 0.2, seatG); thigh.rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(0.044, 0.036, 0.46, 12), skin, sx * 0.075, 0.25, 0.4, seatG);
+    const shoe = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.43, seatG); shoe.rotation.x = Math.PI / 2;
   }
-  const lap = add(new THREE.CylinderGeometry(0.21, 0.16, 0.46, 28, 1, true), skirtM, 0, HIP + 0.02, 0.19, body); lap.rotation.x = Math.PI / 2; // ひざの上のスカート
-  add(new THREE.CylinderGeometry(0.2, 0.235, 0.26, 28, 1, true), skirtM, 0, HIP - 0.13, 0.36, body); // ひざから下に落ちる布
-  const torso = add(new THREE.CapsuleGeometry(0.125, 0.32, 8, 20), cloth, 0, HIP + 0.3, 0, body); torso.scale.set(1.05, 1, 0.82);
-  add(new THREE.CylinderGeometry(0.046, 0.06, 0.1, 20), cloth, 0, HIP + 0.6, 0, body); // ハイネック
-  add(new THREE.CylinderGeometry(0.037, 0.04, 0.12), skin, 0, HIP + 0.64, 0, body);
+  const lap = add(new THREE.CylinderGeometry(0.21, 0.16, 0.46, 28, 1, true), skirtM, 0, HIP + 0.02, 0.19, seatG); lap.rotation.x = Math.PI / 2; // ひざの上のスカート
+  add(new THREE.CylinderGeometry(0.2, 0.235, 0.26, 28, 1, true), skirtM, 0, HIP - 0.13, 0.36, seatG); // ひざから下に落ちる布
+  for (const sx of [-1, 1]) { add(new THREE.CylinderGeometry(0.05, 0.04, 0.9, 12), skin, sx * 0.075, 0.45, 0, standG); const sh = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.04, standG); sh.rotation.x = Math.PI / 2; }
+  add(new THREE.CylinderGeometry(0.15, 0.3, 0.52, 32, 1, true), skirtM, 0, 0.7, 0, standG); // 立ち姿のスカート
+  const torso = add(new THREE.CapsuleGeometry(0.125, 0.32, 8, 20), cloth, 0, HIP + 0.3, 0, upper); torso.scale.set(1.05, 1, 0.82);
+  add(new THREE.CylinderGeometry(0.046, 0.06, 0.1, 20), cloth, 0, HIP + 0.6, 0, upper); // ハイネック
+  add(new THREE.CylinderGeometry(0.037, 0.04, 0.12), skin, 0, HIP + 0.64, 0, upper);
   const arms = [];
   for (const sx of [-1, 1]) { // sx=-1 が彼女の右手（+Z向き）
     const pivot = new THREE.Group(); pivot.position.set(sx * 0.155, HIP + 0.52, 0);
@@ -465,9 +763,9 @@ const chr = { expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, 
     add(new THREE.CylinderGeometry(0.037, 0.03, 0.5, 14), sleeve, 0, -0.25, 0, pivot);
     add(new THREE.TorusGeometry(0.03, 0.009, 6, 14), cloth, 0, -0.49, 0, pivot).rotation.x = Math.PI / 2;
     const hand = add(new THREE.SphereGeometry(0.034, 14, 10), skin, 0, -0.54, 0, pivot); hand.scale.set(0.8, 1.25, 0.6);
-    pivot.userData.hand = hand; pivot.userData.side = sx; body.add(pivot); arms.push(pivot);
+    pivot.userData.hand = hand; pivot.userData.side = sx; upper.add(pivot); arms.push(pivot);
   }
-  const headPivot = new THREE.Group(); headPivot.position.y = HIP + 0.68; body.add(headPivot);
+  const headPivot = new THREE.Group(); headPivot.position.y = HIP + 0.68; upper.add(headPivot);
   const head = new THREE.Group(); head.position.y = 0.12; head.scale.setScalar(0.93); headPivot.add(head);
   add(new THREE.SphereGeometry(0.16, 32, 24), skin, 0, 0, 0, head);
   add(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.41), hairM, 0, 0.01, 0, head);
@@ -496,15 +794,16 @@ const chr = { expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, 
   for (const sx of [-1, 1]) add(new THREE.OctahedronGeometry(0.011), std(0xd8dde4, { metalness: 0.9, roughness: 0.2 }), sx * 0.15, -0.075, 0, head);
   root.position.set(0, 0, -0.58);
   scene.add(root);
-  Object.assign(chr, { root, body, torso, arms, headPivot, head, eyes, irises, smileEyes, brows, blush, blushLines, mouth, smileMouth, frownMouth,
+  Object.assign(chr, { root, body, upper, seatG, standG, torso, arms, headPivot, head, eyes, irises, smileEyes, brows, blush, blushLines, mouth, smileMouth, frownMouth,
     blushLevel: 0, patting: false, patTime: 0, patIdle: 9, patLast: 0, gaze: new THREE.Vector2(), gazeT: 1, gazeTarget: new THREE.Vector2(), tilt: 0 });
 }
 function setExpression(e, sec = 6) { chr.expr = e; chr.exprT = sec; }
 function startGesture(g) { chr.gesture = g; chr.gestureT = 0; }
+function setPose(p) { chr.pose = p; chr.upper.position.y = p === 'stand' ? 0.42 : 0; chr.seatG.visible = p !== 'stand'; chr.standG.visible = p === 'stand'; }
 const ARM_LEN = 0.54, DOWN = new THREE.Vector3(0, -1, 0);
 // 腕を目標の位置へ伸ばす（届かない分は腕を縮めて曲げているように見せる）
 function reachTo(arm, worldPos, k) {
-  const local = chr.body.worldToLocal(worldPos.clone()).sub(arm.position), d = local.length();
+  const local = arm.parent.worldToLocal(worldPos.clone()).sub(arm.position), d = local.length();
   arm.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(DOWN, local.normalize()), k);
   arm.scale.y += (THREE.MathUtils.clamp(d / ARM_LEN, 0.45, 1.05) - arm.scale.y) * k;
 }
@@ -516,16 +815,18 @@ function sip() {
 }
 const tools = {
   order_drink({ drink, for_whom }) {
+    if (curLoc !== 'cafe') return { ok: false, reason: 'ここはカフェではないので注文できない' };
     const who = for_whom === 'player' ? ['player'] : for_whom === 'both' ? ['mina', 'player'] : ['mina'];
     const got = who.map(w => deliver(w, drink || 'ブレンドコーヒー'));
     return { ok: true, status: `${got[0]}を注文した。少ししたら店員さんが運んでくる` };
   },
   sip_drink() {
+    if (curLoc !== 'cafe') return { ok: false, reason: 'いまは飲み物を持っていない' };
     if (!drinks.mina) return { ok: false, reason: 'まだ飲み物がない' };
     if (drinks.mina.userData.level <= 0.02) return { ok: false, reason: 'もう飲み終わっている' };
     sip(); return { ok: true, left: Math.round(drinks.mina.userData.level * 100) + '%' };
   },
-  look_outside() { chr.lookOutT = 3.5; return { ok: true, outside: `${TIME_JA[timeMode]}の街並み。電線と街路樹、向かいにビルと小さな看板が見える` }; },
+  look_outside() { chr.lookOutT = 3.5; return { ok: true, outside: curLoc === 'cafe' ? `${TIME_JA[timeMode]}の街並み。電線と街路樹、向かいにビルと小さな看板が見える` : LOCS[curLoc].desc }; },
   gesture({ type }) { startGesture(type); return { ok: true }; },
   set_expression({ emotion }) { setExpression(emotion); return { ok: true }; },
 };
@@ -533,7 +834,7 @@ const TOOL_NAMES = Object.keys(tools);
 const toolDecls = [
   { name: 'order_drink', description: 'カフェで飲み物を注文する。自分の分は for_whom="me"、プレイヤーの分なら "player"、2人分なら "both"。', parameters: { type: 'OBJECT', properties: { drink: { type: 'STRING', enum: DRINK_NAMES }, for_whom: { type: 'STRING', enum: ['me', 'player', 'both'] } }, required: ['drink'] } },
   { name: 'sip_drink', description: '自分の飲み物をひとくち飲む。' },
-  { name: 'look_outside', description: '窓の外をながめる。' },
+  { name: 'look_outside', description: '窓の外や周りの景色をながめる。' },
   { name: 'gesture', description: '身振りをする。', parameters: { type: 'OBJECT', properties: { type: { type: 'STRING', enum: ['wave', 'nod', 'shake', 'tilt'] } }, required: ['type'] } },
   { name: 'set_expression', description: '表情を変える。感情が動いたら使う。', parameters: { type: 'OBJECT', properties: { emotion: { type: 'STRING', enum: ['neutral', 'happy', 'sad', 'surprised', 'angry', 'shy'] } }, required: ['emotion'] } },
 ];
@@ -541,11 +842,14 @@ function systemPrompt() {
   const past = memory.slice(-16).join('\n');
   const mine = drinks.mina ? `${drinks.mina.userData.name}（残り${Math.round(drinks.mina.userData.level * 100)}%）` : 'まだ頼んでいない';
   const theirs = drinks.player ? drinks.player.userData.name : 'まだ頼んでいない';
-  return `あなたは「${charName()}」。都内の小さなカフェで、窓際の丸テーブルにプレイヤーと向かい合って座り、声で会話している。窓の外は${TIME_JA[timeMode]}の街並み。
+  return `あなたは「${charName()}」。プレイヤーと一緒に都内の街で過ごしていて、声で会話している。いまの場所：${LOCS[curLoc].name}（${LOCS[curLoc].desc}）。時間帯は${TIME_JA[timeMode]}。
 【性格】${$('persona').value}
 【話し方】日本語の自然な話し言葉。穏やかで落ち着いたトーンで、テンションは上げすぎない。返事は1〜2文で短く、間を空けずにすぐ返す。「えっと」などのつなぎ言葉は使わない。説明口調や箇条書きは禁止。
+【二人の関係】${relText()}
+【これまでの出来事】${story.log.slice(-6).join(' / ') || 'まだ特にない'}
+【移動】プレイヤーがどこかへ行きたいと言ったら、画面の「地図」から一緒に移動できる。行ける場所：${story.unlocked.map(id => LOCS[id].name).join('、')}。
 【カフェ】メニュー：${DRINK_NAMES.join('、')}。あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。
-【体】あなたは椅子に座っていて、ツールで動ける。注文は order_drink、飲むときは sip_drink、窓の外を見るときは look_outside、感情が動いたら set_expression、身振りは gesture。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。
+【体】あなたには体があり、ツールで動ける。注文は order_drink、飲むときは sip_drink、窓の外を見るときは look_outside、感情が動いたら set_expression、身振りは gesture。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。
 【注意】「（ ）」で囲まれた文はお店の中で起きたことの通知で、プレイヤーの発言ではない。それに自然に反応する。
 ${past ? '【これまでの会話の記録（覚えていること）】\n' + past : '【初対面】今日初めて会う。'}`;
 }
@@ -679,7 +983,7 @@ const live = {
   handle(msg) {
     if (msg.setupComplete) {
       this.ready = true; pill(muted ? 'マイクOFF・文字で話せます' : '会話中', 'on'); log('— 接続 —');
-      if (!this.greeted) { this.greeted = true; this.sendText(memory.length ? '（プレイヤーがまたカフェに来て、向かいの席に座った。覚えていることに少し触れつつ迎えて）' : '（プレイヤーがカフェに来て、向かいの席に座った。気づいて声をかけて）'); }
+      if (!this.greeted) { this.greeted = true; this.sendText(memory.length ? `（プレイヤーとまた会えた。いまは${LOCS[curLoc].name}にいる。覚えていることに少し触れつつ迎えて）` : `（プレイヤーと${LOCS[curLoc].name}で会った。気づいて声をかけて）`); }
       return;
     }
     if (msg.toolCall) {
@@ -785,7 +1089,7 @@ function updateCharacter(dt, t) {
   const speaking = playing.size > 0;
   // 待っている間のしぐさ：ときどき飲む／窓の外を見る
   chr.idleT -= dt;
-  if (chr.idleT < 0) { chr.idleT = 18 + Math.random() * 25; if (!speaking) { if (drinks.mina && drinks.mina.userData.level > 0.15 && Math.random() < 0.6) sip(); else chr.lookOutT = 2.5 + Math.random() * 2; } }
+  if (chr.idleT < 0) { chr.idleT = 18 + Math.random() * 25; if (!speaking && !storyOpen) { if (curLoc === 'cafe' && drinks.mina && drinks.mina.userData.level > 0.15 && Math.random() < 0.6) sip(); else chr.lookOutT = 2.5 + Math.random() * 2; } }
   chr.body.position.y = Math.sin(t * 1.6) * 0.003;
   // 身振り
   chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false, tiltG = 0;
@@ -796,7 +1100,8 @@ function updateCharacter(dt, t) {
   else if (chr.gesture) chr.gesture = null;
   // 腕：普段はテーブルの上に手を置く
   const [rArm, lArm] = chr.arms, k = Math.min(1, dt * 8);
-  const restPos = sx => chr.root.localToWorld(new THREE.Vector3(sx * 0.13, TABLE_TOP + 0.03, 0.34));
+  const rest = LOCS[curLoc].rest;
+  const restPos = sx => chr.root.localToWorld(rest === 'table' ? new THREE.Vector3(sx * 0.13, TABLE_TOP + 0.03, 0.34) : rest === 'lap' ? new THREE.Vector3(sx * 0.12, 0.56, 0.3) : new THREE.Vector3(sx * 0.2, 0.86, 0.04));
   // ひとくち飲む動き
   if (chr.sipT > 0) {
     chr.sipT -= dt; const p = chr.sipT, dr = chr.holdingCup;
@@ -890,7 +1195,14 @@ function updateDrinks(dt) {
   if (drinks.player && Math.random() < dt / 90) setLevel(drinks.player, drinks.player.userData.level - 0.1); // 自分のカップも少しずつ減っていく
 }
 
-window.__vrc = { live, tools, chr, drinks, deliver, applyTime, pat: s => { deskPat = s; } };
+$('mapBtn').onclick = () => { renderMap(); $('map').classList.add('open'); };
+$('closeMap').onclick = () => $('map').classList.remove('open');
+$('map').onclick = e => { if (e.target === $('map')) $('map').classList.remove('open'); };
+$('storyBtn').onclick = openStory;
+addEventListener('keydown', e => { if (e.key === 'Escape') { $('map').classList.remove('open'); $('settings').classList.remove('open'); } });
+goTo(LOCS[curLoc] && story.unlocked.includes(curLoc) ? curLoc : 'cafe', false);
+
+window.__vrc = { live, tools, chr, drinks, deliver, applyTime, goTo, openStory, story: () => story, pat: s => { deskPat = s; } };
 
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
