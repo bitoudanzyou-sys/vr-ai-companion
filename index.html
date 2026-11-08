@@ -91,6 +91,18 @@
   #mapArea button.here .ev { color:#7a3b10; }
   #rel { margin-top:12px; font-size:13px; color:var(--muted); letter-spacing:.05em; }
   #map .row { display:flex; justify-content:flex-end; margin-top:10px; }
+  #reflect { position:fixed; inset:0; z-index:40; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.5); }
+  #reflect.open { display:flex; }
+  #reflect .card { width:min(560px, calc(100vw - 24px)); max-height:calc(100vh - 32px); overflow:auto; padding:20px; border-radius:18px; }
+  #reflect h2 { margin:0 0 14px; font-size:17px; font-weight:500; } #reflect h2 small { font-size:12px; color:var(--muted); margin-left:6px; }
+  #reflect h3 { font-size:13px; color:var(--muted); font-weight:500; margin:16px 0 6px; }
+  .axis { display:grid; grid-template-columns:72px 1fr 72px; align-items:center; gap:10px; margin:10px 0; font-size:13px; }
+  .axis span:last-child { text-align:right; }
+  .axis .track { position:relative; height:6px; border-radius:3px; background:rgba(255,255,255,.12); }
+  .axis .knob { position:absolute; top:50%; width:14px; height:14px; border-radius:50%; background:var(--accent); transform:translate(-50%,-50%); }
+  #reflectText { font-size:14px; line-height:1.8; margin:14px 0 0; }
+  #answers { margin:0; padding-left:18px; font-size:12px; color:var(--muted); line-height:1.8; }
+  #reflect .row { display:flex; gap:8px; justify-content:flex-end; margin-top:14px; }
   #fade { position:fixed; inset:0; background:#000; opacity:0; transition:opacity .45s; pointer-events:none; z-index:50; }
   #fade.on { opacity:1; }
   #toast { position:fixed; left:50%; bottom:86px; transform:translateX(-50%); padding:8px 14px; border-radius:999px; font-size:13px; z-index:11; opacity:0; transition:opacity .3s; pointer-events:none; }
@@ -128,6 +140,7 @@
       </select>
     </label>
     <label><span>BGM</span><input id="bgmVol" type="range" min="0" max="100" value="35"></label>
+    <button id="openReflect">ふりかえり</button>
     <button id="openSettings">設定</button>
   </div>
 </div>
@@ -155,12 +168,19 @@
   <div id="rel"></div>
   <div class="row"><button id="closeMap">閉じる</button></div>
 </div></div>
+<div id="reflect"><div class="card glass">
+  <h2>ふりかえり　<small>これまでの答えから見える、いまのあなた</small></h2>
+  <div id="axes"></div>
+  <p id="reflectText"></p>
+  <h3>あなたの答え</h3><ul id="answers"></ul>
+  <div class="row"><button class="primary" id="askMina">ミナと話してみる</button><button id="closeReflect">閉じる</button></div>
+</div></div>
 <div id="fade"></div>
 
 <div id="order" class="glass">
   <h3>メニュー</h3>
   <div id="drinks"></div>
-  <label class="opt"><input type="checkbox" id="orderForMina" checked> ミナの分も頼む（ミナが自分で選ぶ）</label>
+  <label class="opt"><input type="checkbox" id="orderForMina" checked> ミナの飲み物も頼む（ミナが自分で選ぶ）</label>
 </div>
 
 <div id="settings">
@@ -182,6 +202,7 @@
     <div class="row">
       <button class="primary" id="saveSettings">保存してつなぎ直す</button>
       <button id="forget">記憶リセット</button>
+      <button id="resetStory">物語を最初から</button>
       <button id="closeSettings">閉じる</button>
     </div>
     <div id="log"></div>
@@ -236,7 +257,7 @@ const canvasTex = (w, h, draw, rx = 1, ry = 1) => {
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rx, ry); tx.anisotropy = 4; return tx;
 };
 let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-const groups = { cafe: new THREE.Group(), street: new THREE.Group(), park: new THREE.Group(), station: new THREE.Group(), river: new THREE.Group() };
+const groups = { cafe: new THREE.Group(), street: new THREE.Group(), park: new THREE.Group(), station: new THREE.Group(), izakaya: new THREE.Group(), river: new THREE.Group() };
 for (const g of Object.values(groups)) scene.add(g);
 let P = scene, LOCS = {}, curLoc = store.get('loc', 'cafe');
 const add = (geo, mat, x, y, z, parent = P) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m; };
@@ -536,55 +557,124 @@ P = groups.river;
 }
 P = scene;
 
+
+// --- 居酒屋（オリジナル） ---
+P = groups.izakaya;
+{
+  const W = 6, D = 6, H = 2.7, wood = std(0x6b4630, { roughness: 0.7 }), darkWood = std(0x3a2618, { roughness: 0.7 });
+  const fl = add(new THREE.PlaneGeometry(W, D), std(0xffffff, { map: tileTex('#5a5048', '#4a4038', 6, 6), roughness: 0.9 }), 0, 0, 0.6); fl.rotation.x = -Math.PI / 2;
+  const cl = add(new THREE.PlaneGeometry(W, D), darkWood, 0, H, 0.6); cl.rotation.x = Math.PI / 2;
+  const plankTex = canvasTex(256, 256, (g, w, h) => { for (let i = 0; i < 8; i++) { const v = 90 + rnd() * 25; g.fillStyle = `rgb(${v + 20},${v - 10},${v - 40})`; g.fillRect(i * 32, 0, 32, h); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(i * 32, 0, 2, h); } }, 4, 1);
+  const wallM = std(0xffffff, { map: plankTex, roughness: 0.8 });
+  const back = add(new THREE.PlaneGeometry(W, H), wallM, 0, H / 2, -2.4);
+  const left = add(new THREE.PlaneGeometry(D, H), wallM, -W / 2, H / 2, 0.6); left.rotation.y = Math.PI / 2;
+  const right = add(new THREE.PlaneGeometry(D, H), wallM, W / 2, H / 2, 0.6); right.rotation.y = -Math.PI / 2;
+  const front = add(new THREE.PlaneGeometry(W, H), wallM, 0, H / 2, 3.6); front.rotation.y = Math.PI;
+  // 二人のテーブルと椅子（カフェと同じ高さ）
+  add(new THREE.BoxGeometry(0.9, 0.04, 0.75), std(0x8a5a38, { roughness: 0.5 }), 0, 0.715, 0);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.BoxGeometry(0.05, 0.7, 0.05), darkWood, sx * 0.4, 0.35, sz * 0.33);
+  add(new THREE.BoxGeometry(0.42, 0.04, 0.4), wood, 0, 0.45, -0.6); for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.45, 0.04), darkWood, sx * 0.18, 0.225, -0.6 + sz * 0.17);
+  // 奥のカウンターと酒瓶の棚
+  add(new THREE.BoxGeometry(4.2, 1.0, 0.6), darkWood, 0.6, 0.5, -1.6); add(new THREE.BoxGeometry(4.4, 0.06, 0.7), std(0xa87a4e, { roughness: 0.4 }), 0.6, 1.03, -1.6);
+  for (const y of [1.4, 1.8]) {
+    add(new THREE.BoxGeometry(4, 0.04, 0.25), wood, 0.6, y, -2.28);
+    for (let x = -1.3; x < 2.5; x += 0.16 + rnd() * 0.06) { const h = 0.22 + rnd() * 0.12; add(new THREE.CylinderGeometry(0.035, 0.04, h, 10), std([0x2f5a3a, 0x6b3a20, 0xe8e2d6, 0x203a5a, 0x8a6a2a][Math.floor(rnd() * 5)], { roughness: 0.25 }), x, y + 0.02 + h / 2, -2.28); }
+  }
+  for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 16), std(0x2e2320), -0.8 + i * 0.95, 0.64, -1.05);
+  // 壁のお品書き（短冊）
+  const items = ['焼き鳥', '枝豆', 'だし巻き', '冷奴', '唐揚げ', '生ビール', 'ハイボール', '日本酒', 'ウーロン茶'];
+  items.forEach((w, i) => { const tx = canvasTex(96, 384, (g, cw, ch) => { g.fillStyle = '#efe4c8'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#2a1d12'; g.font = 'bold 64px serif'; [...w].forEach((c, k) => g.fillText(c, 16, 80 + k * 70)); });
+    const m = add(new THREE.PlaneGeometry(0.16, 0.6), std(0xffffff, { map: tx }), -W / 2 + 0.02, 1.85, -1.6 + i * 0.22); m.rotation.y = Math.PI / 2; });
+  // 赤ちょうちん
+  const lanternTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#c8331f'; g.fillRect(0, 0, w, h); g.fillStyle = '#1a1210'; g.font = 'bold 120px serif'; g.fillText('酒', 70, 170); g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14); });
+  for (const [x, z] of [[-1.6, -0.6], [1.6, -0.6], [0.6, -1.4]]) {
+    const l = add(new THREE.SphereGeometry(0.22, 18, 14), new THREE.MeshStandardMaterial({ map: lanternTex, emissive: 0xff7a40, emissiveMap: lanternTex, emissiveIntensity: 0.9, roughness: 0.6 }), x, 2.1, z); l.scale.y = 1.35;
+    const pl = new THREE.PointLight(0xffa860, 1.3, 5, 1.6); pl.position.set(x, 1.95, z); P.add(pl);
+  }
+  // 入口ののれん
+  const norenTex = canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#1f3456'; g.fillRect(0, 0, w, h); g.fillStyle = '#f2ece0'; g.font = 'bold 110px serif'; g.fillText('灯', 60, 170); g.fillText('り', 300, 170); g.fillStyle = '#16263f'; for (let i = 1; i < 4; i++) g.fillRect(i * w / 4 - 3, 70, 6, h); });
+  const noren = add(new THREE.PlaneGeometry(1.4, 0.7), std(0xffffff, { map: norenTex, side: THREE.DoubleSide }), -2.0, 2.1, 3.55); noren.rotation.y = Math.PI;
+  add(new THREE.BoxGeometry(0.6, 0.5, 0.4), std(0x2a5a9a), 2.6, 0.25, 2.8); add(new THREE.BoxGeometry(0.6, 0.5, 0.4), std(0xc8331f), 2.6, 0.75, 2.8); // ビールケース
+  const amb = new THREE.PointLight(0xffc890, 0.8, 7, 1.2); amb.position.set(0, 2.4, 0.4); P.add(amb);
+}
+P = scene;
+
 // ================= 場所とストーリー =================
 LOCS = {
   cafe: { name: 'カフェ', desc: '窓際の丸テーブルに向かい合って座っている。', pose: 'sit', rest: 'table', mina: [0, -0.58, 0], cam: [0, 0.95, 1.24, -0.12], map: [44, 42] },
   street: { name: '商店街', desc: '古い商店が並ぶ小さな商店街を、並んで歩いている途中。提灯が頭上に揺れている。', pose: 'stand', rest: 'side', mina: [0, 0.6, 0], cam: [0, 2.7, 1.62, -0.05], map: [24, 60] },
   park: { name: '公園', desc: '池のある公園。ベンチにあなたが座り、プレイヤーはその前に立っている。', pose: 'sit', rest: 'lap', mina: [0, -0.06, 0], cam: [0, 1.9, 1.55, -0.2], map: [70, 22] },
   station: { name: 'みなと台駅前', desc: '駅前の広場。改札の前、時計の下で向かい合って立っている。', pose: 'stand', rest: 'side', mina: [0, 0.4, 0], cam: [0, 2.5, 1.62, -0.05], map: [62, 70] },
+  izakaya: { name: '居酒屋「灯り」', desc: '駅の裏の小さな居酒屋。赤ちょうちんの下の二人がけのテーブルに向かい合って座っている。', pose: 'sit', rest: 'table', mina: [0, -0.58, 0], cam: [0, 0.95, 1.24, -0.1], map: [40, 80], time: 'night' },
   river: { name: '川沿い', desc: '夜の川沿いの遊歩道。手すりの向こうで、水面に街の灯りが揺れている。', pose: 'stand', rest: 'side', mina: [0.2, -1.6, 0], cam: [0, 0.55, 1.62, -0.05], map: [86, 82], time: 'night' },
 };
+// 自己分析の5つの軸（左右どちらが良い・悪いではない）
+const AXES = [['自由', '安定'], ['共感', '解決'], ['正直', '配慮'], ['挑戦', '穏やか'], ['つながり', 'ひとり']];
+// 選択肢：aff はミナの性格（急かさない・飾らない・日常を大事にする）から見た好感度の変化。表示順は毎回シャッフル
 const STORY = {
   c1: { loc: 'cafe', title: '第1話　窓際の約束', narr: 'カップが半分くらい空いたころ、ミナがスマホの画面をこちらに向けた。',
     mina: '最近見つけた商店街の小さなお店が気になっていて、一緒に行ってみない？と誘う',
     choices: [
-      { t: 'いいね、行ってみよう', aff: 2, react: 'プレイヤーは乗り気で、行ってみようと言った。うれしそうに反応する' },
-      { t: 'どんなお店なの？', aff: 1, react: 'プレイヤーはどんなお店か聞いた。少しだけお店のことを話して、あらためて誘う' },
-      { t: '今日はここでゆっくりしたいな', aff: 0, react: 'プレイヤーは今日はここでゆっくりしたいと言った。少し残念そうだけど、わかった、じゃあ今度ね、と受け止める' },
+      { t: '行ってみたい。どんなところか楽しみ', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは楽しみだと言った。うれしそうに反応する' },
+      { t: '今日はここでもう少しゆっくりしたいな', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーは正直に、今日はここでゆっくりしたいと言った。気持ちを言ってくれたことがうれしくて、じゃあまた今度ね、と笑う' },
+      { t: 'ミナが行きたいなら付き合うよ', aff: 0, v: { 配慮: 2 }, react: 'プレイヤーは「ミナが行きたいなら」と言った。ありがとうと言いつつ、あなた自身はどうしたいの？と少しだけ聞く' },
+      { t: '先に口コミを調べてみようか', aff: 0, v: { 安定: 1, 解決: 1 }, react: 'プレイヤーは先に口コミを調べようと言った。しっかりしてるね、と笑いつつ、わからないまま行くのも楽しいかもと言う' },
     ], unlock: ['street'], next: 'c2' },
   c2: { loc: 'street', title: '第2話　古道具屋のオルゴール', narr: '商店街の端に、古い雑貨やレコードが並ぶ小さな店があった。ミナは店先の木のオルゴールの前で足を止めた。',
     mina: '小さなオルゴールを手に取って、ネジを巻いたときの音がなんだか懐かしいと話す',
     choices: [
-      { t: 'それ、プレゼントさせて', aff: 2, flag: 'musicbox', react: 'プレイヤーがオルゴールをプレゼントすると言った。驚いて、照れながら受け取る' },
-      { t: '似合いそうだね', aff: 1, react: 'プレイヤーが「似合いそう」と言った。少し照れて笑う' },
-      { t: 'そろそろ次に行こうか', aff: -1, react: 'プレイヤーは先に進もうと言った。名残惜しそうにオルゴールを棚に戻す' },
+      { t: 'それ、プレゼントさせて', aff: 1, flag: 'musicbox', v: { つながり: 2 }, react: 'プレイヤーがオルゴールをプレゼントすると言った。驚いて、少し遠慮しながらも、照れて受け取る' },
+      { t: 'その音、どんな思い出があるの？', aff: 2, v: { 共感: 2 }, react: 'プレイヤーは音にまつわる思い出を聞いてくれた。小さいころの思い出を少しだけ話す' },
+      { t: '気に入ったなら、迷わず買っちゃえば？', aff: 0, v: { 挑戦: 1, 解決: 1 }, react: 'プレイヤーは迷わず買えばと背中を押した。うーん、と笑って、迷う時間も好きなんだと言う' },
+      { t: '正直、古い物ってあまりピンとこないかも', aff: 1, v: { 正直: 2 }, react: 'プレイヤーは正直に、古い物はピンとこないと言った。そういうの言ってくれるの好き、と笑って、どんな物にときめくのか聞き返す' },
     ], unlock: ['park'], next: 'c3' },
   c3: { loc: 'park', title: '第3話　ベンチの話', narr: '公園のベンチ。ミナはしばらく黙って池を眺めていた。',
     mina: '最近仕事で少し疲れていて、うまく言葉にできないけど、こうしてぼーっとできる時間がありがたいと打ち明ける',
     choices: [
-      { t: 'うん、ゆっくり聞かせて', aff: 2, react: 'プレイヤーは急かさず、ゆっくり聞かせてと言った。安心して、少しずつ話す' },
-      { t: '無理しないでね', aff: 1, react: 'プレイヤーは無理しないでと気遣った。ありがとうと微笑む' },
-      { t: 'こうしたら楽になるかも', aff: 0, react: 'プレイヤーは解決策を提案した。ありがたく受け取りつつ、今は聞いてほしかっただけかも、と正直に少し笑う' },
+      { t: 'うん。急がなくていいから、聞かせて', aff: 2, v: { 共感: 1, 穏やか: 1 }, react: 'プレイヤーは急かさずに聞くと言った。安心して、少しずつ話す' },
+      { t: 'こうしたら少し楽になるかも', aff: 0, v: { 解決: 2 }, react: 'プレイヤーは解決策を提案した。ありがたく受け取りつつ、今は聞いてほしかっただけかも、と正直に少し笑う' },
+      { t: '実は自分も最近、同じように疲れてる', aff: 2, v: { 正直: 1, つながり: 1 }, react: 'プレイヤーも疲れていると打ち明けた。驚いて、じゃあ一緒にぼーっとしよう、と隣で肩の力を抜く' },
+      { t: 'いっそ環境を変えるのもありだと思う', aff: 1, v: { 自由: 1, 挑戦: 1 }, react: 'プレイヤーは環境を変えるのもありだと言った。考えたこともなかった、と少し真剣な顔になる' },
     ], unlock: ['station'], next: 'c4' },
   c4: { loc: 'station', title: '第4話　改札の前で', narr: '駅前の時計が六時を回った。改札の前で、ミナは少しだけ立ち止まった。',
-    mina: '今日は楽しかった、でももう少しだけ歩きたい気もする、と遠回しに言う',
+    mina: '今日は楽しかった、でももう少しだけ一緒にいたい気もする、と遠回しに言う',
     choices: [
-      { t: '川沿い、少し歩こうか', aff: 2, react: 'プレイヤーが川沿いを歩こうと誘った。うれしそうにうなずく' },
-      { t: '送っていくよ', aff: 1, react: 'プレイヤーが送っていくと言った。ありがとう、じゃあ川沿いを通って帰ろうと言う' },
-      { t: 'また明日ね', aff: 0, react: 'プレイヤーは今日はここで解散しようと言った。少し寂しそうに、でも笑って手を振り、次に会ったら川沿いを歩きたいと言う' },
-    ], unlock: ['river'], next: 'c5' },
-  c5: { loc: 'river', title: '最終話　川沿いの夜', narr: '水面に街の灯りが揺れている。ミナは手すりに手を置いて、こちらを振り返った。',
-    mina: () => story.aff >= 6 ? `今日一日を振り返って、あなたといると肩の力が抜ける、また一緒にどこかへ行きたいと素直に伝える${story.flags.includes('musicbox') ? '。オルゴールのお礼もあらためて言う' : ''}`
-      : story.aff >= 3 ? '今日は楽しかった、また誘ってもいい？と聞く' : '今日はありがとう、次はもう少しゆっくり話したいなと言う',
+      { t: '駅の裏の居酒屋で、軽く一杯どう？', aff: 1, v: { つながり: 1, 自由: 1 }, react: 'プレイヤーが居酒屋に誘った。いいね、と笑ってうなずく', next: 'c5', unlock: ['izakaya'] },
+      { t: '川沿いを少し歩こうか', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーが川沿いを歩こうと誘った。うれしそうにうなずく', next: 'c6', unlock: ['river', 'izakaya'] },
+      { t: '今日はここで。また会おう', aff: 0, v: { ひとり: 1, 安定: 1 }, react: 'プレイヤーは今日はここで解散しようと言った。少し寂しそうに、でも笑って、次は駅の裏の居酒屋に行ってみたいと言う', next: 'c5', unlock: ['izakaya'] },
+    ] },
+  c5: { loc: 'izakaya', title: '第5話　赤ちょうちんの下で', narr: '焼き鳥の煙がゆっくり流れていく。グラスを合わせたあと、ミナが少し真面目な顔でこちらを見た。',
+    mina: 'もし何でもできるとしたら、これから先どんなふうに生きたい？と聞く',
     choices: [
-      { t: 'もちろん。また来よう', aff: 1, react: 'プレイヤーは「もちろん、また来よう」と答えた。安心したように笑う' },
-      { t: '（だまって手を差し出す）', aff: 2, react: 'プレイヤーは黙って手を差し出した。少し驚いて、そっと手をつなぐ', expr: 'shy' },
-    ], unlock: ['cafe', 'street', 'park', 'station', 'river'], next: 'free' },
+      { t: '自分のペースで、自由に働いて暮らしたい', aff: 1, v: { 自由: 2 }, react: 'プレイヤーは自由に自分のペースで生きたいと言った。その気持ちを大事にしてほしい、と言って、なぜそう思うのかを優しく聞く' },
+      { t: '大切な人と、穏やかな毎日を続けたい', aff: 1, v: { 穏やか: 1, つながり: 1 }, react: 'プレイヤーは大切な人と穏やかに暮らしたいと言った。いいね、と微笑んで、その「穏やかさ」ってどんな時間か聞く' },
+      { t: 'まだよくわからない。探しているところ', aff: 2, v: { 正直: 2 }, react: 'プレイヤーは正直に、まだわからないと言った。それが一番本当っぽい、と笑って、最近少しでも心が動いたことを聞く' },
+      { t: '誰かの役に立つことを、形にしたい', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは誰かの役に立つことを形にしたいと言った。かっこいい、と言いながら、その「誰か」って誰が浮かぶか聞く' },
+    ], unlock: ['river'], next: 'c6' },
+  c6: { loc: 'river', title: '最終話　川沿いの夜', narr: '水面に街の灯りが揺れている。ミナは手すりに手を置いて、こちらを振り返った。',
+    mina: () => {
+      const top = topTraits(2).join('と');
+      return (story.aff >= 6 ? '今日一日を振り返って、あなたといると肩の力が抜ける、また一緒にどこかへ行きたいと素直に伝える' : story.aff >= 3 ? '今日は楽しかった、また誘ってもいい？と聞く' : '今日はありがとう、次はもう少しゆっくり話したいなと言う')
+        + (story.flags.includes('musicbox') ? '。オルゴールのお礼もあらためて言う' : '')
+        + (top ? `。今日の話から、あなたは「${top}」を大事にしている人なのかも、と決めつけずにそっと伝える` : '');
+    },
+    choices: [
+      { t: 'もちろん。また来よう', aff: 1, v: { つながり: 1 }, react: 'プレイヤーは「もちろん、また来よう」と答えた。安心したように笑う' },
+      { t: '（だまって手を差し出す）', aff: 2, v: { つながり: 1 }, react: 'プレイヤーは黙って手を差し出した。少し驚いて、そっと手をつなぐ', expr: 'shy' },
+      { t: '今日、自分のことが少しわかった気がする', aff: 2, v: { 正直: 1 }, react: 'プレイヤーは、今日自分のことが少しわかった気がすると言った。うれしそうに、何がわかったのか聞く' },
+    ], unlock: Object.keys(LOCS), next: 'free' },
 };
-let story = { ch: 'c1', aff: 0, flags: [], unlocked: ['cafe'], log: [] };
+let story = { ch: 'c1', aff: 0, flags: [], unlocked: ['cafe'], log: [], vals: {}, ver: 2 };
 try { Object.assign(story, JSON.parse(store.get('story', '{}'))); } catch {}
+if (story.ver !== 2) { // 旧版からの引き継ぎ
+  if (story.ch === 'c5') story.ch = 'c6';
+  if (['c5', 'c6', 'free'].includes(story.ch) && !story.unlocked.includes('izakaya')) story.unlocked.push('izakaya');
+  if (story.ch === 'free') story.unlocked = Object.keys(LOCS);
+  story.vals = story.vals || {}; story.ver = 2;
+}
 const saveStory = () => store.set('story', JSON.stringify(story));
 const relText = () => story.aff >= 8 ? 'とても近い。特別な存在だと感じ始めている' : story.aff >= 5 ? '気の置けない、居心地のいい関係' : story.aff >= 2 ? '少しずつ打ち解けてきた' : 'まだ少し距離がある';
+function topTraits(n) { return Object.entries(story.vals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k); }
 const storyAvailable = () => story.ch !== 'free' && STORY[story.ch] && STORY[story.ch].loc === curLoc;
 function refreshStoryUI() {
   $('storyBtn').style.display = storyAvailable() ? '' : 'none';
@@ -598,25 +688,51 @@ function openStory() {
   $('storyTitle').textContent = ev.title; $('storyNarr').textContent = ev.narr;
   $('storyLine').textContent = live.ready ? '' : `${charName()}は「${intent}」という様子だ。`;
   $('choices').innerHTML = '';
-  ev.choices.forEach(c => { const b = document.createElement('button'); b.textContent = c.t; b.onclick = () => choose(ev, c); $('choices').appendChild(b); });
+  const order = ev.choices.map((c, i) => [Math.random(), c]).sort((a, b) => a[0] - b[0]).map(x => x[1]); // 毎回並びを変える
+  order.forEach(c => { const b = document.createElement('button'); b.textContent = c.t; b.onclick = () => choose(ev, c); $('choices').appendChild(b); });
+  const own = document.createElement('button'); own.textContent = '（選ばずに、自分の言葉で答える）'; own.style.opacity = '0.7';
+  own.onclick = () => { $('storyBox').classList.remove('open'); storyOpen = false; story.pendingOwn = story.ch; saveStory(); $('msg').focus(); toast('声か文字で、思ったとおりに答えてください'); };
+  $('choices').appendChild(own);
   $('storyBox').classList.add('open'); $('storyBtn').classList.remove('glow');
   stopPlayback();
   live.sendText(`（ストーリー「${ev.title}」が始まった。状況：${ev.narr} この場面で、あなたは次のことを自分の言葉で1〜2文で話して：${intent}。話したら、プレイヤーの返事を待つ）`);
 }
+function advance(ev, nextId, unlock) {
+  for (const u of unlock || ev.unlock || []) if (!story.unlocked.includes(u)) story.unlocked.push(u);
+  story.ch = nextId || ev.next; saveStory(); refreshStoryUI();
+  setTimeout(() => {
+    if (story.ch === 'free') toast('物語はここでひと区切り。「ふりかえり」で今日の自分を見てみませんか');
+    else { const nx = STORY[story.ch]; if (nx.loc !== curLoc) toast(`地図から「${LOCS[nx.loc].name}」へ行けるようになりました`); }
+  }, 2500);
+}
 function choose(ev, c) {
   $('storyBox').classList.remove('open'); storyOpen = false;
   story.aff += c.aff || 0; if (c.flag) story.flags.push(c.flag);
-  for (const u of ev.unlock || []) if (!story.unlocked.includes(u)) story.unlocked.push(u);
-  story.log.push(`${ev.title}：プレイヤーは「${c.t}」と答えた`); story.ch = ev.next; saveStory();
+  for (const [k, v] of Object.entries(c.v || {})) story.vals[k] = (story.vals[k] || 0) + v;
+  story.log.push(`${ev.title}：「${c.t}」`);
   remember(`（${ev.title}）プレイヤーは「${c.t}」と答えた`);
-  if (c.expr) setExpression(c.expr, 8); else if ((c.aff || 0) >= 2) setExpression('happy', 6); else if ((c.aff || 0) < 0) setExpression('sad', 5);
+  if (c.expr) setExpression(c.expr, 8); else if ((c.aff || 0) >= 2) setExpression('happy', 6); else if ((c.aff || 0) <= 0) setExpression('neutral', 3);
   stopPlayback();
   live.sendText(`（${c.react}。あなたらしく1〜2文で反応して）`);
-  refreshStoryUI();
-  setTimeout(() => {
-    if (story.ch === 'free') toast('物語はここでひと区切り。どこへでも行けます');
-    else { const nx = STORY[story.ch]; if (nx.loc !== curLoc) toast(`地図から「${LOCS[nx.loc].name}」へ行けるようになりました`); }
-  }, 2500);
+  advance(ev, c.next, c.unlock);
+}
+// 選択肢を使わず自分の言葉で答えたとき：次の発言をAIに読ませて、好感度と軸の判定もしてもらう
+function judgeOwnAnswer(text) {
+  const ev = STORY[story.pendingOwn]; if (!ev) return false;
+  story.pendingOwn = null; story.log.push(`${ev.title}：自分の言葉「${text}」`); saveStory();
+  const axesList = AXES.map(a => a.join('／')).join('、');
+  live.sendText(`（ストーリー「${ev.title}」で、プレイヤーは選択肢を選ばずに自分の言葉でこう答えた：「${text}」。まず、あなたらしく1〜2文で反応して。そのあと、反応とは別に record_answer を呼んで、この答えで縮まった心の距離（-1〜2）と、表れている価値観（${axesList} から最大2つ）を記録して）`);
+  pendingAdvance = ev;
+  return true;
+}
+let pendingAdvance = null;
+function recordAnswer({ closeness, values }) {
+  const ev = pendingAdvance; if (!ev) return { ok: false };
+  pendingAdvance = null;
+  story.aff += THREE.MathUtils.clamp(Math.round(+closeness || 0), -1, 2);
+  for (const v of String(values || '').split(/[、,\s]+/)) if (AXES.flat().includes(v)) story.vals[v] = (story.vals[v] || 0) + 1;
+  advance(ev, ev.next || 'c5', ev.next ? null : ['izakaya']);
+  return { ok: true };
 }
 function renderMap() {
   const area = $('mapArea'); area.querySelectorAll('button').forEach(b => b.remove());
@@ -631,16 +747,37 @@ function renderMap() {
   const n = Math.max(0, Math.min(5, Math.round(story.aff / 2)));
   $('rel').textContent = `ミナとの距離　${'●'.repeat(n)}${'○'.repeat(5 - n)}`;
 }
+// ふりかえり（自己分析）
+function renderReflect() {
+  const box = $('axes'); box.innerHTML = '';
+  for (const [a, b] of AXES) {
+    const va = story.vals[a] || 0, vb = story.vals[b] || 0, tot = va + vb, pos = tot ? va / tot : 0.5;
+    const row = document.createElement('div'); row.className = 'axis';
+    row.innerHTML = `<span>${a}</span><div class="track"><div class="knob" style="left:${(1 - pos) * 100}%"></div></div><span>${b}</span>`;
+    box.appendChild(row);
+  }
+  const top = topTraits(3);
+  $('reflectText').textContent = top.length ? `これまでの答えには「${top.join('」「')}」がよく表れています。良い悪いではなく、いまのあなたの傾向です。` : 'まだ答えが少ないので、物語を進めると見えてきます。';
+  $('answers').innerHTML = story.log.slice(-12).map(l => `<li>${l.replace(/</g, '&lt;')}</li>`).join('') || '<li>まだありません</li>';
+}
+function askMinaReflect() {
+  $('reflect').classList.remove('open');
+  const sum = AXES.map(([a, b]) => `${a}${story.vals[a] || 0}・${b}${story.vals[b] || 0}`).join('、');
+  stopPlayback();
+  live.sendText(`（プレイヤーが自分のことを知りたがっている。これまでの答え：${story.log.slice(-8).join(' / ') || 'まだ少ない'}。価値観の傾向（数字は回数）：${sum}。決めつけずに、あなたが感じたことを1〜2文で伝えて、プレイヤーが本当に大事にしていることや本当はやりたいことを考えられる問いを、ひとつだけ投げかけて）`);
+}
+function clearDrinks() { for (const w of ['mina', 'player', 'food']) if (drinks[w]) { drinks[w].removeFromParent(); drinks[w] = null; } chr.holdingCup = null; deliveries.length = 0; }
 function goTo(id, announce = true) {
   const L = LOCS[id]; if (!L) return;
   $('fade').classList.add('on');
   setTimeout(() => {
+    if (id !== curLoc) clearDrinks();
     curLoc = id; store.set('loc', id);
     for (const [k, g] of Object.entries(groups)) g.visible = k === id;
     setPose(L.pose); chr.root.position.set(L.mina[0], 0, L.mina[1]); chr.root.rotation.y = L.mina[2];
     player.position.set(L.cam[0], 0, L.cam[1]); camera.position.y = L.cam[2]; yaw = 0; pitch = L.cam[3];
     chr.sipT = 0; chr.holdingCup = null; chr.lookOutT = 0;
-    $('orderBtn').style.display = id === 'cafe' ? '' : 'none';
+    buildMenu();
     applyTime(effTime(), false);
     refreshStoryUI();
     $('fade').classList.remove('on');
@@ -681,16 +818,40 @@ const DRINKS = {
   'ココア': { liquid: 0x5a3322, foam: 0xe9d6c2, kind: 'mug', note: '甘くてあたたかい' },
   '抹茶ラテ': { liquid: 0x8fae5a, foam: 0xe8efd8, kind: 'mug', note: 'ほろ苦い' },
   'クリームソーダ': { liquid: 0x3fc46a, kind: 'soda', note: 'メロンにアイスとさくらんぼ' },
+  '生ビール': { liquid: 0xe0a630, kind: 'beer', note: 'よく冷えた中ジョッキ' },
+  'ハイボール': { liquid: 0xe8c890, kind: 'highball', note: 'レモン入り' },
+  '日本酒': { liquid: 0xf2ecd8, kind: 'choko', note: '冷やでお猪口に' },
+  'ウーロン茶': { liquid: 0x6a3a14, kind: 'highball', note: 'お酒が苦手なときに' },
+  '焼き鳥': { kind: 'plate', food: 'yakitori', note: 'ねぎまとつくね' },
+  '枝豆': { kind: 'plate', food: 'edamame', note: '塩ゆで' },
+  'だし巻き卵': { kind: 'plate', food: 'tamago', note: 'ふわふわ' },
 };
+const MENUS = { cafe: ['ブレンドコーヒー', 'カフェラテ', '紅茶', 'ココア', '抹茶ラテ', 'クリームソーダ'], izakaya: ['生ビール', 'ハイボール', '日本酒', 'ウーロン茶', '焼き鳥', '枝豆', 'だし巻き卵'] };
+const isFood = n => DRINKS[n] && DRINKS[n].kind === 'plate';
 const DRINK_NAMES = Object.keys(DRINKS);
 const TABLE_TOP = 0.735;
-const SPOTS = { mina: new THREE.Vector3(-0.14, TABLE_TOP, -0.2), player: new THREE.Vector3(0.16, TABLE_TOP, 0.12) };
-const drinks = { mina: null, player: null };
+const SPOTS = { mina: new THREE.Vector3(-0.14, TABLE_TOP, -0.2), player: new THREE.Vector3(0.16, TABLE_TOP, 0.12), food: new THREE.Vector3(0.04, TABLE_TOP, -0.02) };
+const drinks = { mina: null, player: null, food: null };
 function makeDrink(name) {
   const d = DRINKS[name], g = new THREE.Group();
   const china = std(0xf6f2ea, { roughness: 0.25 }), glassM = new THREE.MeshStandardMaterial({ color: 0xe8f4f0, transparent: true, opacity: 0.35, roughness: 0.05 });
   let liquid, h;
-  if (d.kind === 'soda') {
+  if (d.kind === 'plate') {
+    add(new THREE.CylinderGeometry(0.11, 0.09, 0.015, 28), china, 0, 0.008, 0, g);
+    if (d.food === 'yakitori') for (let i = 0; i < 3; i++) { const sk = new THREE.Group(); sk.position.set(-0.03 + i * 0.03, 0.03, 0); sk.rotation.set(Math.PI / 2, 0, 0.2); g.add(sk); add(new THREE.CylinderGeometry(0.002, 0.002, 0.18), std(0xd8c49a), 0, 0, 0, sk); for (let k = 0; k < 4; k++) add(new THREE.SphereGeometry(0.014, 8, 6), std(k % 2 ? 0x8a4a22 : 0x5a7a2a, { roughness: 0.6 }), 0, -0.05 + k * 0.032, 0, sk); }
+    else if (d.food === 'edamame') for (let i = 0; i < 14; i++) { const e = add(new THREE.CapsuleGeometry(0.008, 0.03, 4, 6), std(0x6aa040), (Math.random() - .5) * 0.12, 0.022 + Math.random() * 0.01, (Math.random() - .5) * 0.1, g); e.rotation.set(Math.PI / 2, 0, Math.random() * 3); }
+    else { add(new THREE.BoxGeometry(0.11, 0.035, 0.05), std(0xf2c64a, { roughness: 0.6 }), 0, 0.03, 0, g); add(new THREE.BoxGeometry(0.03, 0.02, 0.03), std(0xf4f0e8), 0.06, 0.02, 0.04, g); }
+    liquid = new THREE.Group(); liquid.userData = { full: 0, base: 0 }; g.add(liquid);
+  } else if (d.kind === 'beer' || d.kind === 'highball' || d.kind === 'choko') {
+    const r = d.kind === 'beer' ? 0.042 : d.kind === 'choko' ? 0.025 : 0.034; h = d.kind === 'beer' ? 0.13 : d.kind === 'choko' ? 0.035 : 0.15;
+    add(new THREE.CylinderGeometry(r, r * 0.92, h, 20, 1, true), d.kind === 'choko' ? china : glassM, 0, h / 2, 0, g);
+    liquid = add(new THREE.CylinderGeometry(r * 0.95, r * 0.88, h * 0.82, 20), new THREE.MeshStandardMaterial({ color: d.liquid, transparent: true, opacity: d.kind === 'choko' ? 0.9 : 0.8, roughness: 0.1 }), 0, h * 0.41, 0, g);
+    liquid.userData = { full: h * 0.82, base: 0 };
+    if (d.kind === 'beer') { add(new THREE.CylinderGeometry(r * 0.97, r * 0.97, 0.022, 20), std(0xfbf6ea, { roughness: 0.9 }), 0, h * 0.88, 0, g); add(new THREE.TorusGeometry(0.03, 0.007, 8, 14, Math.PI), glassM, r + 0.01, h * 0.5, 0, g).rotation.z = -Math.PI / 2; }
+    if (d.kind === 'highball') for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.022, 0.022, 0.022), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }), (i - 1) * 0.012, h * 0.7 - i * 0.02, 0.005, g);
+    if (d.kind === 'choko') { add(new THREE.SphereGeometry(0.04, 16, 12), china, 0.07, 0.04, 0.02, g); add(new THREE.CylinderGeometry(0.012, 0.018, 0.06, 12), china, 0.07, 0.1, 0.02, g); }
+    d.tall = d.kind !== 'choko';
+  } else if (d.kind === 'soda') {
     h = 0.17; add(new THREE.CylinderGeometry(0.038, 0.03, h, 20, 1, true), glassM, 0, h / 2, 0, g);
     liquid = add(new THREE.CylinderGeometry(0.035, 0.028, h * 0.8, 20), new THREE.MeshStandardMaterial({ color: d.liquid, transparent: true, opacity: 0.85, roughness: 0.1 }), 0, h * 0.4, 0, g);
     add(new THREE.SphereGeometry(0.033, 14, 10), std(0xfaf6ec, { roughness: 0.6 }), 0, h * 0.86, 0, g);
@@ -713,19 +874,21 @@ function makeDrink(name) {
 function setLevel(dr, level) {
   dr.userData.level = Math.max(0, level);
   const L = dr.userData.liquid, u = L.userData;
-  if (DRINKS[dr.userData.name].kind === 'soda') { L.scale.y = Math.max(0.02, dr.userData.level); L.position.y = u.full * L.scale.y / 2; }
+  if (['soda', 'beer', 'highball', 'choko'].includes(DRINKS[dr.userData.name].kind)) { L.scale.y = Math.max(0.02, dr.userData.level); L.position.y = u.full * L.scale.y / 2; }
   else L.position.y = u.base + (u.full - u.base) * dr.userData.level;
   L.visible = dr.userData.level > 0.01;
 }
 const deliveries = [];
 function deliver(who, name, delay = 3.5) {
-  if (!DRINKS[name]) name = DRINK_NAMES.find(n => n.includes(name) || name.includes(n)) || 'ブレンドコーヒー';
+  const menu = MENUS[curLoc] || DRINK_NAMES;
+  if (!menu.includes(name)) name = menu.find(n => n.includes(name) || name.includes(n)) || menu[0];
+  if (isFood(name)) who = 'food';
   deliveries.push({ who, name, t: delay });
   return name;
 }
 function placeDrink(who, name) {
   if (drinks[who]) { if (chr.holdingCup === drinks[who]) chr.holdingCup = null; drinks[who].removeFromParent(); }
-  const dr = makeDrink(name); dr.position.copy(SPOTS[who]); dr.scale.setScalar(0.01); dr.userData.grow = 0; groups.cafe.add(dr); drinks[who] = dr;
+  const dr = makeDrink(name); dr.position.copy(SPOTS[who]); dr.scale.setScalar(0.01); dr.userData.grow = 0; groups[curLoc].add(dr); drinks[who] = dr;
   chime();
   return dr;
 }
@@ -749,8 +912,8 @@ const chr = { expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, 
     add(new THREE.CylinderGeometry(0.044, 0.036, 0.46, 12), skin, sx * 0.075, 0.25, 0.4, seatG);
     const shoe = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.43, seatG); shoe.rotation.x = Math.PI / 2;
   }
-  const lap = add(new THREE.CylinderGeometry(0.21, 0.16, 0.46, 28, 1, true), skirtM, 0, HIP + 0.02, 0.19, seatG); lap.rotation.x = Math.PI / 2; // ひざの上のスカート
-  add(new THREE.CylinderGeometry(0.2, 0.235, 0.26, 28, 1, true), skirtM, 0, HIP - 0.13, 0.36, seatG); // ひざから下に落ちる布
+  const lap = add(new THREE.CylinderGeometry(0.2, 0.16, 0.44, 28, 1, true), skirtM, 0, HIP + 0.075, 0.2, seatG); lap.rotation.x = Math.PI / 2; lap.scale.z = 0.5; // ひざの上のスカート（座面にめり込まないよう平たく）
+  const drape = add(new THREE.CylinderGeometry(0.19, 0.22, 0.24, 28, 1, true), skirtM, 0, HIP - 0.07, 0.4, seatG); drape.scale.z = 0.55; // ひざから下に落ちる布
   for (const sx of [-1, 1]) { add(new THREE.CylinderGeometry(0.05, 0.04, 0.9, 12), skin, sx * 0.075, 0.45, 0, standG); const sh = add(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 }), sx * 0.075, 0.035, 0.04, standG); sh.rotation.x = Math.PI / 2; }
   add(new THREE.CylinderGeometry(0.15, 0.3, 0.52, 32, 1, true), skirtM, 0, 0.7, 0, standG); // 立ち姿のスカート
   const torso = add(new THREE.CapsuleGeometry(0.125, 0.32, 8, 20), cloth, 0, HIP + 0.3, 0, upper); torso.scale.set(1.05, 1, 0.82);
@@ -815,25 +978,27 @@ function sip() {
 }
 const tools = {
   order_drink({ drink, for_whom }) {
-    if (curLoc !== 'cafe') return { ok: false, reason: 'ここはカフェではないので注文できない' };
+    if (!MENUS[curLoc]) return { ok: false, reason: 'ここではお店で注文できない' };
     const who = for_whom === 'player' ? ['player'] : for_whom === 'both' ? ['mina', 'player'] : ['mina'];
     const got = who.map(w => deliver(w, drink || 'ブレンドコーヒー'));
     return { ok: true, status: `${got[0]}を注文した。少ししたら店員さんが運んでくる` };
   },
   sip_drink() {
-    if (curLoc !== 'cafe') return { ok: false, reason: 'いまは飲み物を持っていない' };
+    if (!MENUS[curLoc]) return { ok: false, reason: 'いまは飲み物を持っていない' };
     if (!drinks.mina) return { ok: false, reason: 'まだ飲み物がない' };
     if (drinks.mina.userData.level <= 0.02) return { ok: false, reason: 'もう飲み終わっている' };
     sip(); return { ok: true, left: Math.round(drinks.mina.userData.level * 100) + '%' };
   },
   look_outside() { chr.lookOutT = 3.5; return { ok: true, outside: curLoc === 'cafe' ? `${TIME_JA[timeMode]}の街並み。電線と街路樹、向かいにビルと小さな看板が見える` : LOCS[curLoc].desc }; },
   gesture({ type }) { startGesture(type); return { ok: true }; },
+  record_answer(args) { return recordAnswer(args); },
   set_expression({ emotion }) { setExpression(emotion); return { ok: true }; },
 };
 const TOOL_NAMES = Object.keys(tools);
 const toolDecls = [
-  { name: 'order_drink', description: 'カフェで飲み物を注文する。自分の分は for_whom="me"、プレイヤーの分なら "player"、2人分なら "both"。', parameters: { type: 'OBJECT', properties: { drink: { type: 'STRING', enum: DRINK_NAMES }, for_whom: { type: 'STRING', enum: ['me', 'player', 'both'] } }, required: ['drink'] } },
+  { name: 'order_drink', description: 'お店（カフェや居酒屋）で飲み物や食べ物を注文する。自分の分は for_whom="me"、プレイヤーの分なら "player"、2人分なら "both"。', parameters: { type: 'OBJECT', properties: { drink: { type: 'STRING', enum: DRINK_NAMES }, for_whom: { type: 'STRING', enum: ['me', 'player', 'both'] } }, required: ['drink'] } },
   { name: 'sip_drink', description: '自分の飲み物をひとくち飲む。' },
+  { name: 'record_answer', description: '物語の場面でプレイヤーが自分の言葉で答えたときだけ使う。答えで縮まった心の距離と、表れている価値観を記録する。声には出さない。', parameters: { type: 'OBJECT', properties: { closeness: { type: 'NUMBER' }, values: { type: 'STRING' } }, required: ['closeness'] } },
   { name: 'look_outside', description: '窓の外や周りの景色をながめる。' },
   { name: 'gesture', description: '身振りをする。', parameters: { type: 'OBJECT', properties: { type: { type: 'STRING', enum: ['wave', 'nod', 'shake', 'tilt'] } }, required: ['type'] } },
   { name: 'set_expression', description: '表情を変える。感情が動いたら使う。', parameters: { type: 'OBJECT', properties: { emotion: { type: 'STRING', enum: ['neutral', 'happy', 'sad', 'surprised', 'angry', 'shy'] } }, required: ['emotion'] } },
@@ -848,7 +1013,8 @@ function systemPrompt() {
 【二人の関係】${relText()}
 【これまでの出来事】${story.log.slice(-6).join(' / ') || 'まだ特にない'}
 【移動】プレイヤーがどこかへ行きたいと言ったら、画面の「地図」から一緒に移動できる。行ける場所：${story.unlocked.map(id => LOCS[id].name).join('、')}。
-【カフェ】メニュー：${DRINK_NAMES.join('、')}。あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。
+${MENUS[curLoc] ? `【このお店のメニュー】${MENUS[curLoc].join('、')}。あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。` : ''}
+【問いかけ】ときどき、プレイヤーが本当に大事にしていることや、本当はどうしたいのかを、押しつけずにひとつ問いかける。答えを評価したり、正解を示したりはしない。
 【体】あなたには体があり、ツールで動ける。注文は order_drink、飲むときは sip_drink、窓の外を見るときは look_outside、感情が動いたら set_expression、身振りは gesture。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。
 【注意】「（ ）」で囲まれた文はお店の中で起きたことの通知で、プレイヤーの発言ではない。それに自然に反応する。
 ${past ? '【これまでの会話の記録（覚えていること）】\n' + past : '【初対面】今日初めて会う。'}`;
@@ -1005,7 +1171,7 @@ const live = {
     if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; this.lastHeard = performance.now(); this.waiting = true; }
     if (sc.outputTranscription?.text) this.outTx = runSpokenTools(this.outTx + sc.outputTranscription.text);
     if (sc.turnComplete) {
-      if (this.inTx.trim()) { remember('プレイヤー: ' + this.inTx.trim()); log('あなた: ' + this.inTx.trim()); }
+      if (this.inTx.trim()) { remember('プレイヤー: ' + this.inTx.trim()); log('あなた: ' + this.inTx.trim()); if (story.pendingOwn) judgeOwnAnswer(this.inTx.trim()); }
       if (this.outTx.trim()) { remember(charName() + ': ' + this.outTx.trim()); log(charName() + ': ' + this.outTx.trim()); }
       this.inTx = ''; this.outTx = '';
     }
@@ -1021,24 +1187,29 @@ $('mic').onclick = async () => { if (!micStream && muted) { const ok = await ini
 function sendTyped() {
   const t = $('msg').value.trim(); if (!t) return;
   if (!live.ready) { toast('まだつながっていません'); return; }
-  stopPlayback(); live.sendText(t); remember('プレイヤー: ' + t); log('あなた（文字）: ' + t);
+  stopPlayback(); remember('プレイヤー: ' + t); log('あなた（文字）: ' + t);
+  if (!(story.pendingOwn && judgeOwnAnswer(t))) live.sendText(t);
   live.lastHeard = performance.now(); live.waiting = true; $('msg').value = '';
 }
 $('send').onclick = sendTyped;
 $('msg').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendTyped(); } });
 
-// 注文
-for (const name of DRINK_NAMES) {
-  const b = document.createElement('button'); b.innerHTML = `${name}<small>${DRINKS[name].note}</small>`;
-  b.onclick = () => {
-    $('order').classList.remove('open');
-    deliver('player', name);
-    const forMina = $('orderForMina').checked;
-    toast(`${name}を注文しました`);
-    if (live.ready) live.sendText(forMina ? `（プレイヤーが${name}を注文した。あなたも自分の飲みたいものを order_drink で頼んで）` : `（プレイヤーが${name}を注文した）`);
-    else if (forMina) deliver('mina', DRINK_NAMES[Math.floor(Math.random() * DRINK_NAMES.length)], 4.5);
-  };
-  $('drinks').appendChild(b);
+// 注文（お店ごとのメニュー）
+function buildMenu() {
+  const menu = MENUS[curLoc]; $('orderBtn').style.display = menu ? '' : 'none'; $('drinks').innerHTML = '';
+  if (!menu) return;
+  for (const name of menu) {
+    const b = document.createElement('button'); b.innerHTML = `${name}<small>${DRINKS[name].note}</small>`;
+    b.onclick = () => {
+      $('order').classList.remove('open');
+      deliver('player', name);
+      const forMina = $('orderForMina').checked && !isFood(name);
+      toast(`${name}を注文しました`);
+      if (live.ready) live.sendText(forMina ? `（プレイヤーが${name}を注文した。あなたも自分の飲みたいものを order_drink で頼んで）` : `（プレイヤーが${name}を注文した）`);
+      else if (forMina) deliver('mina', menu.filter(n => !isFood(n))[Math.floor(Math.random() * 4)], 4.5);
+    };
+    $('drinks').appendChild(b);
+  }
 }
 $('orderBtn').onclick = e => { e.stopPropagation(); $('order').classList.toggle('open'); };
 addEventListener('pointerdown', e => { if (!$('order').contains(e.target) && e.target !== $('orderBtn')) $('order').classList.remove('open'); });
@@ -1089,7 +1260,7 @@ function updateCharacter(dt, t) {
   const speaking = playing.size > 0;
   // 待っている間のしぐさ：ときどき飲む／窓の外を見る
   chr.idleT -= dt;
-  if (chr.idleT < 0) { chr.idleT = 18 + Math.random() * 25; if (!speaking && !storyOpen) { if (curLoc === 'cafe' && drinks.mina && drinks.mina.userData.level > 0.15 && Math.random() < 0.6) sip(); else chr.lookOutT = 2.5 + Math.random() * 2; } }
+  if (chr.idleT < 0) { chr.idleT = 18 + Math.random() * 25; if (!speaking && !storyOpen) { if (MENUS[curLoc] && drinks.mina && drinks.mina.userData.level > 0.15 && Math.random() < 0.6) sip(); else chr.lookOutT = 2.5 + Math.random() * 2; } }
   chr.body.position.y = Math.sin(t * 1.6) * 0.003;
   // 身振り
   chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false, tiltG = 0;
@@ -1105,7 +1276,7 @@ function updateCharacter(dt, t) {
   // ひとくち飲む動き
   if (chr.sipT > 0) {
     chr.sipT -= dt; const p = chr.sipT, dr = chr.holdingCup;
-    const mouthW = chr.root.localToWorld(new THREE.Vector3(0, DRINKS[dr ? dr.userData.name : 'ブレンドコーヒー'].kind === 'soda' ? 0.98 : 1.08, 0.24)), home = SPOTS.mina.clone();
+    const mouthW = chr.root.localToWorld(new THREE.Vector3(0, (dr && DRINKS[dr.userData.name].tall !== undefined ? (DRINKS[dr.userData.name].tall ? 0.98 : 1.1) : DRINKS[dr ? dr.userData.name : 'ブレンドコーヒー'].kind === 'soda' ? 0.98 : 1.08), 0.24)), home = SPOTS.mina.clone();
     const lift = p > 2.6 ? (3.2 - p) / 0.6 : p > 0.6 ? 1 : p / 0.6;
     if (dr) { dr.position.lerpVectors(home, mouthW, THREE.MathUtils.smoothstep(lift, 0, 1)); dr.rotation.x = -0.5 * THREE.MathUtils.smoothstep(lift, 0.6, 1); if (p < 1.6 && p > 1.5) setLevel(dr, dr.userData.level - 0.12); }
     reachTo(rArm, dr ? dr.position.clone().add(new THREE.Vector3(0.05, 0.03, 0)) : restPos(-1), k);
@@ -1188,6 +1359,7 @@ function updateDrinks(dt) {
     if (d.t <= 0) {
       deliveries.splice(i, 1); placeDrink(d.who, d.name);
       if (d.who === 'mina') live.sendText(`（あなたが頼んだ${d.name}が届いた）`);
+      else if (d.who === 'food') live.sendText(`（${d.name}がテーブルに届いた）`);
       else { toast(`${d.name}が届きました`); live.sendText(`（プレイヤーの${d.name}が届いた）`); }
     }
   }
@@ -1199,7 +1371,12 @@ $('mapBtn').onclick = () => { renderMap(); $('map').classList.add('open'); };
 $('closeMap').onclick = () => $('map').classList.remove('open');
 $('map').onclick = e => { if (e.target === $('map')) $('map').classList.remove('open'); };
 $('storyBtn').onclick = openStory;
-addEventListener('keydown', e => { if (e.key === 'Escape') { $('map').classList.remove('open'); $('settings').classList.remove('open'); } });
+$('openReflect').onclick = () => { renderReflect(); $('reflect').classList.add('open'); };
+$('closeReflect').onclick = () => $('reflect').classList.remove('open');
+$('reflect').onclick = e => { if (e.target === $('reflect')) $('reflect').classList.remove('open'); };
+$('askMina').onclick = askMinaReflect;
+$('resetStory').onclick = () => { if (!confirm('物語を最初からやり直しますか？（会話の記憶はそのまま残ります）')) return; story = { ch: 'c1', aff: 0, flags: [], unlocked: ['cafe'], log: [], vals: {}, ver: 2 }; saveStory(); $('settings').classList.remove('open'); goTo('cafe', false); toast('物語を最初に戻しました'); };
+addEventListener('keydown', e => { if (e.key === 'Escape') { $('map').classList.remove('open'); $('settings').classList.remove('open'); $('reflect').classList.remove('open'); } });
 goTo(LOCS[curLoc] && story.unlocked.includes(curLoc) ? curLoc : 'cafe', false);
 
 window.__vrc = { live, tools, chr, drinks, deliver, applyTime, goTo, openStory, story: () => story, pat: s => { deskPat = s; } };
