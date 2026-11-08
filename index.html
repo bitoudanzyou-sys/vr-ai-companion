@@ -152,7 +152,7 @@ addItem('青いキューブ', new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.1, 20), std(0xf4f1ea, { roughness: 0.3 }));
   const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.008, 8, 16), std(0xf4f1ea, { roughness: 0.3 }));
   handle.position.x = 0.052; cup.add(body, handle);
-  addItem('マグカップ', cup, 0.05, new THREE.Vector3(1.6, TABLE.top + 0.05, -1.2));
+  addItem('白いマグカップ', cup, 0.05, new THREE.Vector3(1.6, TABLE.top + 0.05, -1.2));
 }
 addItem('緑のボトル', new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 16), std(0x3aa564, { roughness: 0.2 })), 0.11, new THREE.Vector3(-1.2, 0.11, -0.6));
 addItem('大きな木箱', new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), std(0xa0753f)), 0.35, new THREE.Vector3(-1.6, 0.35, -2.2), true);
@@ -313,7 +313,7 @@ function systemPrompt() {
   return `あなたは「${name}」。VR空間の小さな庭に住んでいるキャラクターで、プレイヤーとマイク越しに音声で会話している。
 【性格】${$('persona').value}
 【話し方】日本語の自然な話し言葉。1〜3文で短く返す。ときどき「えっと」「んー」などのフィラーを混ぜてよい。説明口調や箇条書きは禁止。
-【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。
+【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。頼まれた物の呼び方が少し違っても、周りの物の中で一番近いものだと判断して、聞き返さずにすぐ動く。
 【周りの物】${items.map(i => i.name + (i.heavy ? '（重い）' : '')).join('、')}。位置が分からなければ look_around。
 【注意】「（ ）」で囲まれた文はゲームからの状況通知で、プレイヤーの発言ではない。それに自然に反応する。
 ${past ? '【これまでの会話の記録（覚えていること）】\n' + past : '【初対面】今日初めて会う。'}`;
@@ -352,6 +352,16 @@ function playPcm24k(b64) {
 function stopPlayback() { for (const s of playing) { try { s.stop(); } catch {} } playing.clear(); playQueueEnd = 0; }
 function setMuted(m) { muted = m; $('mute').textContent = 'マイク: ' + (m ? 'OFF' : 'ON'); connState = m ? 'マイクOFF' : (live.ready ? '会話中' : connState); drawBubble(); }
 $('mute').onclick = () => setMuted(!muted);
+
+// AIが関数呼び出しを「声に出して」しまった場合でも、その内容を拾って実行し、字幕からは消す
+function runSpokenTools(text) {
+  return text.replace(/(bring_item|come_here|go_to_item|put_down|gesture|set_expression|look_around)\s*\(([^)]*)\)/g, (m, name, argStr) => {
+    const args = {};
+    for (const a of argStr.matchAll(/(\w+)\s*=\s*["'「]?([^"'」,]+)["'」]?/g)) args[a[1]] = a[2].trim();
+    try { tools[name](args); log(`[行動・読み上げから補完] ${name} ${JSON.stringify(args)}`); } catch {}
+    return '';
+  });
+}
 
 // ---------- Gemini Live API client ----------
 const live = {
@@ -422,7 +432,7 @@ const live = {
       playPcm24k(p.inlineData.data);
     }
     if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; userText = this.inTx; drawBubble(); this.lastHeard = performance.now(); this.waiting = true; }
-    if (sc.outputTranscription?.text) { this.outTx += sc.outputTranscription.text; bubbleText = this.outTx; drawBubble(); }
+    if (sc.outputTranscription?.text) { this.outTx = runSpokenTools(this.outTx + sc.outputTranscription.text); bubbleText = this.outTx; drawBubble(); }
     if (sc.turnComplete) {
       const name = $('name').value || 'ミナ';
       if (this.inTx.trim()) { remember('プレイヤー: ' + this.inTx.trim()); log('あなた: ' + this.inTx.trim()); }
