@@ -359,7 +359,7 @@ const live = {
   connect() {
     const key = $('key').value.trim();
     if (!key) { status('APIキーが未入力です（Google AI Studio で無料発行できます）'); return; }
-    this.wantOpen = true; this.ready = false;
+    this.wantOpen = true; this.ready = false; this.gotAudio = false;
     connState = '接続中…'; drawBubble(); status('接続中…');
     const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key);
     const ws = this.ws = new WebSocket(url);
@@ -373,8 +373,7 @@ const live = {
         contextWindowCompression: { slidingWindow: {} },
       };
       if (this.fast) {
-        // 速度優先: 考える時間をなくし、話し終わりを早めに判定する
-        setup.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+        // 速度優先: 話し終わりを早めに判定する
         setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 350 } };
       }
       ws.send(JSON.stringify({ setup }));
@@ -386,9 +385,9 @@ const live = {
     };
     ws.onerror = () => status('通信エラー');
     ws.onclose = ev => {
-      if (!this.ready && this.fast && this.wantOpen) {
-        // 速度優先の設定をモデルが受け付けなかった場合は、標準設定でつなぎ直す
-        log('速度優先設定が使えなかったため標準設定で再接続します'); this.fast = false; setTimeout(() => this.connect(), 500); return;
+      if (!this.gotAudio && this.fast && this.wantOpen) {
+        // 一度も返事が来ないまま切れた場合は、速度優先設定を外して標準設定でつなぎ直す
+        log('速度優先設定で失敗したため標準設定で再接続します'); this.fast = false; this.ready = false; setTimeout(() => this.connect(), 800); return;
       }
       this.ready = false;
       const why = ev.reason ? `（${ev.reason}）` : '';
@@ -400,7 +399,7 @@ const live = {
   },
   handle(msg) {
     if (msg.setupComplete) {
-      this.ready = true; this.retries = 0; connState = muted ? 'マイクOFF' : '会話中'; drawBubble();
+      this.ready = true; connState = muted ? 'マイクOFF' : '会話中'; drawBubble();
       status('接続しました。話しかけてみてください'); log('— 接続 —');
       if (!memory.length) this.sendText('（プレイヤーが初めてこの世界にやってきた。気づいて声をかけて）');
       else this.sendText('（プレイヤーがまた遊びに来た。覚えていることに触れつつ迎えて）');
@@ -418,6 +417,7 @@ const live = {
     const sc = msg.serverContent; if (!sc) return;
     if (sc.interrupted) { stopPlayback(); }
     if (sc.modelTurn?.parts) for (const p of sc.modelTurn.parts) if (p.inlineData?.data) {
+      if (!this.gotAudio) { this.gotAudio = true; this.retries = 0; } // 返事が届いて初めて「正常」とみなす
       if (this.waiting) { this.waiting = false; log(`[速度] 応答まで ${((performance.now() - this.lastHeard) / 1000).toFixed(1)}秒`); }
       playPcm24k(p.inlineData.data);
     }
