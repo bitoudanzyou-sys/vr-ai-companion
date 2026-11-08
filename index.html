@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AIコンパニオンVR</title>
+<style>
+  :root { --bg:#14161c; --panel:#1e2129; --fg:#e8e9ee; --muted:#9aa0ad; --accent:#7cc4ff; --line:#333846; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif; overflow:hidden; }
+  canvas { display:block; }
+  #panel { position:fixed; top:12px; left:12px; width:min(380px,calc(100vw - 24px)); max-height:calc(100vh - 24px); overflow:auto;
+           background:rgba(30,33,41,.94); border:1px solid var(--line); border-radius:12px; padding:14px 16px; z-index:10; }
+  #panel.min .body { display:none; }
+  h1 { font-size:16px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:center; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input,select,textarea { width:100%; background:#11131a; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px; font-size:14px; font-family:inherit; }
+  textarea { height:84px; resize:vertical; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  button { background:#2a2f3b; color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:14px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#0b1020; border-color:var(--accent); font-weight:600; }
+  #status { font-size:13px; margin-top:10px; color:var(--accent); min-height:1.2em; }
+  #log { font-size:12px; color:var(--muted); margin-top:8px; max-height:140px; overflow:auto; white-space:pre-wrap; }
+  .note { font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px; }
+  #toggle { padding:2px 8px; font-size:12px; }
+  #VRButton { z-index:20; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="panel">
+  <h1><span>AIコンパニオンVR</span><button id="toggle">たたむ</button></h1>
+  <div class="body">
+    <label>Gemini APIキー（この端末のブラウザにだけ保存）</label>
+    <input id="key" type="password" autocomplete="off" placeholder="AIza...">
+    <label>キャラクター名</label>
+    <input id="name" value="ミナ">
+    <label>性格・設定</label>
+    <textarea id="persona">明るくて好奇心旺盛な女の子。ちょっと天然で、タメ口で話す。プレイヤーとは仲の良い友達。この小さな世界で一緒に暮らしている。</textarea>
+    <label>声</label>
+    <select id="voice">
+      <option>Leda</option><option>Aoede</option><option>Kore</option><option>Zephyr</option>
+      <option>Puck</option><option>Charon</option><option>Fenrir</option><option>Orus</option>
+    </select>
+    <label>モデル（通常は変更不要）</label>
+    <input id="model" value="gemini-2.5-flash-native-audio-preview-12-2025">
+    <div class="row">
+      <button class="primary" id="start">接続して会話開始</button>
+      <button id="mute">マイク: ON</button>
+      <button id="forget">記憶リセット</button>
+    </div>
+    <div id="status">APIキーを入れて「接続して会話開始」→ 右下の ENTER VR</div>
+    <div id="log"></div>
+    <div class="note">
+      VR操作：左スティック移動／右スティック回転／グリップかトリガーで物をつかむ／A・Xボタンでマイク切替。<br>
+      「ボール取って」「こっち来て」「手振って」などと話しかけると動きます。頭をなでたり肩をつついたりすると反応します。<br>
+      PC：ドラッグで視点、WASDで移動。
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+// ---------- settings ----------
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('vrc_' + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('vrc_' + k, v); } catch {} },
+};
+for (const k of ['key', 'name', 'persona', 'voice', 'model']) { const v = store.get(k, null); if (v !== null) $(k).value = v; }
+$('toggle').onclick = () => { $('panel').classList.toggle('min'); $('toggle').textContent = $('panel').classList.contains('min') ? 'ひらく' : 'たたむ'; };
+const status = t => { $('status').textContent = t; };
+const log = t => { const el = $('log'); el.textContent += t + '\n'; el.scrollTop = el.scrollHeight; };
+
+// ---------- memory ----------
+let memory = []; try { memory = JSON.parse(store.get('memory', '[]')); } catch { memory = []; }
+const remember = line => { memory.push(line); memory = memory.slice(-80); store.set('memory', JSON.stringify(memory)); };
+$('forget').onclick = () => { memory = []; store.set('memory', '[]'); log('（記憶をリセットしました。次の接続から反映）'); };
+
+// ---------- three.js scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local-floor');
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+document.body.appendChild(VRButton.createButton(renderer));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xbfd9f2);
+scene.fog = new THREE.Fog(0xbfd9f2, 10, 30);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 100);
+camera.rotation.order = 'YXZ';
+camera.position.set(0, 1.6, 0);
+const player = new THREE.Group();
+player.position.set(0, 0, 0.6);
+player.add(camera);
+scene.add(player);
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 1.1));
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.6);
+sun.position.set(3, 6, 2); sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 });
+scene.add(sun);
+
+const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
+const floor = new THREE.Mesh(new THREE.CircleGeometry(12, 48), std(0x9cc58a));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const rug = new THREE.Mesh(new THREE.CircleGeometry(2.6, 48), std(0xe8d9bd));
+rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.005, -1.2); rug.receiveShadow = true; scene.add(rug);
+// trees
+for (let i = 0; i < 14; i++) {
+  const a = i / 14 * Math.PI * 2, r = 7 + (i % 3);
+  const t = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.2), std(0x7a5a3a)); trunk.position.y = 0.6;
+  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.8, 2.0, 8), std(0x4f8f4a)); leaf.position.y = 2.0;
+  t.add(trunk, leaf); t.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); t.traverse(m => m.castShadow = true); scene.add(t);
+}
+// table
+const TABLE = { x: 1.3, z: -1.3, w: 1.2, d: 0.7, top: 0.74 };
+{
+  const g = new THREE.Group();
+  const top = new THREE.Mesh(new THREE.BoxGeometry(TABLE.w, 0.05, TABLE.d), std(0xb98a5a)); top.position.y = TABLE.top - 0.025;
+  g.add(top);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, TABLE.top - 0.05, 0.05), std(0x8a6440));
+    leg.position.set(sx * (TABLE.w / 2 - 0.05), (TABLE.top - 0.05) / 2, sz * (TABLE.d / 2 - 0.05)); g.add(leg);
+  }
+  g.position.set(TABLE.x, 0, TABLE.z); g.traverse(m => { m.castShadow = true; m.receiveShadow = true; }); scene.add(g);
+}
+
+// ---------- items ----------
+const items = [];
+function addItem(name, mesh, r, pos, heavy = false) {
+  mesh.traverse(m => { m.castShadow = true; });
+  mesh.position.copy(pos); scene.add(mesh);
+  items.push({ name, mesh, r, heavy, held: null, vel: new THREE.Vector3(), last: pos.clone() });
+}
+addItem('赤いボール', new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 16), std(0xe0453a, { roughness: 0.4 })), 0.07, new THREE.Vector3(1.0, TABLE.top + 0.07, -1.3));
+addItem('青いキューブ', new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), std(0x3a6fe0)), 0.05, new THREE.Vector3(1.3, TABLE.top + 0.05, -1.4));
+{
+  const cup = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.1, 20), std(0xf4f1ea, { roughness: 0.3 }));
+  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.008, 8, 16), std(0xf4f1ea, { roughness: 0.3 }));
+  handle.position.x = 0.052; cup.add(body, handle);
+  addItem('マグカップ', cup, 0.05, new THREE.Vector3(1.6, TABLE.top + 0.05, -1.2));
+}
+addItem('緑のボトル', new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 16), std(0x3aa564, { roughness: 0.2 })), 0.11, new THREE.Vector3(-1.2, 0.11, -0.6));
+addItem('大きな木箱', new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), std(0xa0753f)), 0.35, new THREE.Vector3(-1.6, 0.35, -2.2), true);
+const ITEM_NAMES = items.map(i => i.name);
+
+function onTable(p) { return Math.abs(p.x - TABLE.x) < TABLE.w / 2 && Math.abs(p.z - TABLE.z) < TABLE.d / 2; }
+const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
+function updateItems(dt) {
+  for (const it of items) {
+    const p = it.mesh.getWorldPosition(tmpV);
+    if (it.held) { it.vel.copy(p).sub(it.last).divideScalar(Math.max(dt, 1e-3)); it.last.copy(p); continue; }
+    it.vel.y -= 9.8 * dt;
+    it.mesh.position.addScaledVector(it.vel, dt);
+    const q = it.mesh.position;
+    const ground = (onTable(q) && it.last.y - it.r >= TABLE.top - 0.03) ? TABLE.top : 0;
+    if (q.y - it.r < ground) {
+      q.y = ground + it.r;
+      it.vel.y = Math.abs(it.vel.y) > 0.5 ? -it.vel.y * 0.3 : 0;
+      it.vel.x *= 0.85; it.vel.z *= 0.85;
+      if (it.vel.lengthSq() < 0.001) it.vel.set(0, 0, 0);
+    }
+    const R = 6; const d = Math.hypot(q.x, q.z); if (d > R) { q.x *= R / d; q.z *= R / d; it.vel.x = it.vel.z = 0; }
+    it.last.copy(q);
+  }
+}
+function describeItem(it) {
+  const p = it.mesh.getWorldPosition(new THREE.Vector3());
+  let where = it.held === 'char' ? 'あなたが持っている' : it.held ? 'プレイヤーが持っている' : onTable(p) && p.y > TABLE.top ? 'テーブルの上' : '床の上';
+  const dist = p.distanceTo(chr.root.position).toFixed(1);
+  return `${it.name}（${where}、あなたから約${dist}m${it.heavy ? '、とても重い' : ''}）`;
+}
+
+// ---------- character (original design built from primitives) ----------
+const chr = { state: 'idle', target: null, onArrive: null, holding: null, offering: false, offerT: 0,
+  expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, walkPhase: 0, lean: 0, lastTouch: 0 };
+{
+  const skin = std(0xffe0cc, { roughness: 0.6 }), hairM = std(0x5b3a6e, { roughness: 0.7, side: THREE.DoubleSide });
+  const cloth = std(0xf7f3ff), skirtM = std(0x6c8ee8), dark = new THREE.MeshBasicMaterial({ color: 0x2a1d33 });
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
+  for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.6), skin); leg.position.set(sx * 0.07, 0.3, 0); body.add(leg);
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.15), std(0x4a3a5a)); shoe.position.set(sx * 0.07, 0.025, 0.02); body.add(shoe); }
+  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.38, 24, 1, true), skirtM); skirt.position.y = 0.72; skirt.material.side = THREE.DoubleSide; body.add(skirt);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.3, 8, 16), cloth); torso.position.y = 1.02; body.add(torso);
+  const ribbon = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), std(0xe24a6a)); ribbon.rotation.x = Math.PI; ribbon.position.set(0, 1.2, 0.13); body.add(ribbon);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1), skin); neck.position.y = 1.3; body.add(neck);
+  const arms = [];
+  for (const sx of [-1, 1]) { // sx=-1 is character's right (faces +Z)
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.19, 1.2, 0);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.48), cloth); arm.position.y = -0.24; pivot.add(arm);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), skin); hand.position.y = -0.5; pivot.add(hand);
+    pivot.userData.hand = hand; body.add(pivot); arms.push(pivot);
+  }
+  const headPivot = new THREE.Group(); headPivot.position.y = 1.36; body.add(headPivot);
+  const head = new THREE.Group(); head.position.y = 0.13; headPivot.add(head);
+  head.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 24), skin));
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.45), hairM); hairTop.position.y = 0.01; head.add(hairTop);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.178, 32, 16, Math.PI, Math.PI, 0, Math.PI * 0.85), hairM); hairBack.scale.set(1, 1.35, 1); hairBack.position.y = -0.06; head.add(hairBack);
+  const eyes = [], brows = [], blush = [];
+  for (const sx of [-1, 1]) {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.026, 16, 12), dark); e.scale.set(0.8, 1.15, 0.45); e.position.set(sx * 0.055, -0.005, 0.148); head.add(e); eyes.push(e);
+    const hl = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff })); hl.position.set(0.3, 0.35, 0.9); e.add(hl);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.007, 0.01), dark); b.position.set(sx * 0.055, 0.05, 0.15); head.add(b); brows.push(b);
+    const bl = new THREE.Mesh(new THREE.CircleGeometry(0.022, 16), new THREE.MeshBasicMaterial({ color: 0xff8fa3, transparent: true, opacity: 0 }));
+    bl.position.set(sx * 0.09, -0.045, 0.138); bl.rotation.y = sx * 0.5; head.add(bl); blush.push(bl);
+  }
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), new THREE.MeshBasicMaterial({ color: 0x9c3048 }));
+  mouth.position.set(0, -0.075, 0.148); mouth.scale.set(1, 0.15, 0.35); head.add(mouth);
+  // speech bubble
+  const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 1024; bubbleCanvas.height = 320;
+  const bubbleTex = new THREE.CanvasTexture(bubbleCanvas); bubbleTex.colorSpace = THREE.SRGBColorSpace;
+  const bubble = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.25), new THREE.MeshBasicMaterial({ map: bubbleTex, transparent: true, depthWrite: false }));
+  bubble.position.y = 2.0; root.add(bubble);
+  root.traverse(m => { if (m.isMesh && m !== bubble) m.castShadow = true; });
+  root.position.set(0, 0, -2.2);
+  scene.add(root);
+  Object.assign(chr, { root, body, torso, arms, headPivot, head, eyes, brows, blush, mouth, bubble, bubbleCanvas, bubbleTex });
+}
+let bubbleText = '', userText = '', bubbleClearAt = 0, connState = '未接続';
+function drawBubble() {
+  const c = chr.bubbleCanvas, g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  const lines = [];
+  const text = bubbleText || (connState !== '会話中' ? `（${connState}）` : '');
+  if (!text && !userText) { chr.bubbleTex.needsUpdate = true; chr.bubble.visible = false; return; }
+  chr.bubble.visible = true;
+  g.fillStyle = 'rgba(255,255,255,0.92)'; g.beginPath(); g.roundRect(8, 8, c.width - 16, c.height - 16, 40); g.fill();
+  g.fillStyle = '#7a7f8c'; g.font = '30px sans-serif';
+  if (userText) g.fillText(('あなた：' + userText).slice(-34), 40, 56);
+  g.fillStyle = '#1d2030'; g.font = 'bold 44px sans-serif';
+  let line = '';
+  const t = text.slice(-120);
+  for (const ch of t) { if (g.measureText(line + ch).width > c.width - 90) { lines.push(line); line = ch; } else line += ch; }
+  lines.push(line);
+  lines.slice(-4).forEach((l, i) => g.fillText(l, 44, 118 + i * 56));
+  chr.bubbleTex.needsUpdate = true;
+}
+drawBubble();
+
+// ---------- character behaviours ----------
+const playerFloorPos = () => { const p = camera.getWorldPosition(new THREE.Vector3()); p.y = 0; return p; };
+function walkTo(p, cb) { chr.target = p.clone(); chr.target.y = 0; chr.onArrive = cb || null; chr.state = 'walk'; }
+function spotNear(targetPos, dist) {
+  const from = chr.root.position.clone(); const dir = from.sub(targetPos); dir.y = 0;
+  if (dir.lengthSq() < 1e-4) dir.set(0, 0, -1);
+  return targetPos.clone().add(dir.normalize().multiplyScalar(dist));
+}
+function setExpression(e, sec = 6) { chr.expr = e; chr.exprT = sec; }
+function startGesture(g) { chr.gesture = g; chr.gestureT = 0; }
+function findItem(name) {
+  return items.find(i => i.name === name) || items.find(i => name && (i.name.includes(name) || name.includes(i.name.replace(/^.+の|^.+い/, ''))));
+}
+function releaseHeld(dropVel) {
+  const it = chr.holding; if (!it) return;
+  scene.attach(it.mesh); it.held = null; it.vel.copy(dropVel || new THREE.Vector3()); it.last.copy(it.mesh.position);
+  chr.holding = null; chr.offering = false;
+}
+
+const tools = {
+  bring_item({ item }) {
+    const it = findItem(item);
+    if (!it) return { ok: false, reason: `「${item}」は見当たらない。あるのは: ${ITEM_NAMES.join('、')}` };
+    if (it.heavy) { startGesture('shake'); return { ok: false, reason: `${it.name}は重すぎて一人では運べない` }; }
+    if (it.held && it.held !== 'char') return { ok: false, reason: 'それはもうプレイヤーが持っている' };
+    if (chr.holding && chr.holding !== it) releaseHeld();
+    const p = it.mesh.getWorldPosition(new THREE.Vector3());
+    walkTo(spotNear(p, 0.35), () => {
+      if (it.held && it.held !== 'char') return;
+      chr.root.lookAt(p.x, 0, p.z);
+      const hand = chr.arms[0].userData.hand;
+      hand.attach(it.mesh); it.mesh.position.set(0, -it.r - 0.02, 0); it.held = 'char'; chr.holding = it;
+      walkTo(spotNear(playerFloorPos(), 0.75), () => { chr.offering = true; chr.offerT = 15; });
+    });
+    return { ok: true, status: `${it.name}を取りに歩き出した。手渡すまで少し時間がかかる` };
+  },
+  come_here() { walkTo(spotNear(playerFloorPos(), 0.9)); return { ok: true }; },
+  go_to_item({ item }) {
+    const it = findItem(item); if (!it) return { ok: false, reason: '見当たらない' };
+    walkTo(spotNear(it.mesh.getWorldPosition(new THREE.Vector3()), 0.5)); return { ok: true };
+  },
+  put_down() { if (!chr.holding) return { ok: false, reason: '何も持っていない' }; releaseHeld(); return { ok: true }; },
+  gesture({ type }) { startGesture(type); return { ok: true }; },
+  set_expression({ emotion }) { setExpression(emotion); return { ok: true }; },
+  look_around() { return { items: items.map(describeItem), player_distance_m: +chr.root.position.distanceTo(playerFloorPos()).toFixed(1) }; },
+};
+const toolDecls = [
+  { name: 'bring_item', description: 'プレイヤーに頼まれた物を歩いて取りに行き、プレイヤーの所まで持ってきて手渡す。', parameters: { type: 'OBJECT', properties: { item: { type: 'STRING', enum: ITEM_NAMES } }, required: ['item'] } },
+  { name: 'come_here', description: 'プレイヤーの近くまで歩いていく。' },
+  { name: 'go_to_item', description: '指定した物のそばまで歩いていく（持ちはしない）。', parameters: { type: 'OBJECT', properties: { item: { type: 'STRING', enum: ITEM_NAMES } }, required: ['item'] } },
+  { name: 'put_down', description: '手に持っている物をその場に置く。' },
+  { name: 'gesture', description: '身振りをする。', parameters: { type: 'OBJECT', properties: { type: { type: 'STRING', enum: ['wave', 'nod', 'shake', 'jump', 'spin'] } }, required: ['type'] } },
+  { name: 'set_expression', description: '表情を変える。感情が動いたら使う。', parameters: { type: 'OBJECT', properties: { emotion: { type: 'STRING', enum: ['neutral', 'happy', 'sad', 'surprised', 'angry', 'shy'] } }, required: ['emotion'] } },
+  { name: 'look_around', description: '周りを見回して、物の位置やプレイヤーとの距離を確認する。' },
+];
+
+function systemPrompt() {
+  const name = $('name').value || 'ミナ';
+  const past = memory.slice(-30).join('\n');
+  return `あなたは「${name}」。VR空間の小さな庭に住んでいるキャラクターで、プレイヤーとマイク越しに音声で会話している。
+【性格】${$('persona').value}
+【話し方】日本語の自然な話し言葉。1〜3文で短く返す。ときどき「えっと」「んー」などのフィラーを混ぜてよい。説明口調や箇条書きは禁止。
+【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。
+【周りの物】${items.map(i => i.name + (i.heavy ? '（重い）' : '')).join('、')}。位置が分からなければ look_around。
+【注意】「（ ）」で囲まれた文はゲームからの状況通知で、プレイヤーの発言ではない。それに自然に反応する。
+${past ? '【これまでの会話の記録（覚えていること）】\n' + past : '【初対面】今日初めて会う。'}`;
+}
+
+// ---------- audio ----------
+let actx = null, micStream = null, micNode = null, outGain, analyser, panner, muted = false;
+let playQueueEnd = 0; const playing = new Set();
+const workletSrc = `class Rec extends AudioWorkletProcessor{constructor(){super();this.r=sampleRate/16000;this.t=0;this.a=0;this.c=0;this.b=new Int16Array(640);this.n=0;}
+process(inp){const ch=inp[0]&&inp[0][0];if(!ch)return true;for(let i=0;i<ch.length;i++){this.a+=ch[i];this.c++;this.t+=1;if(this.t>=this.r){this.t-=this.r;let s=this.a/this.c;this.a=0;this.c=0;s=Math.max(-1,Math.min(1,s));this.b[this.n++]=s<0?s*32768:s*32767;if(this.n===this.b.length){this.port.postMessage(this.b.slice(0));this.n=0;}}}return true;}}
+registerProcessor('rec',Rec);`;
+async function initAudio() {
+  if (actx) { await actx.resume(); return; }
+  actx = new AudioContext();
+  outGain = actx.createGain(); analyser = actx.createAnalyser(); analyser.fftSize = 1024;
+  panner = new PannerNode(actx, { panningModel: 'HRTF', distanceModel: 'inverse', refDistance: 1, maxDistance: 20, rolloffFactor: 1 });
+  outGain.connect(analyser); analyser.connect(panner); panner.connect(actx.destination);
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+  await actx.audioWorklet.addModule(URL.createObjectURL(new Blob([workletSrc], { type: 'application/javascript' })));
+  const src = actx.createMediaStreamSource(micStream);
+  micNode = new AudioWorkletNode(actx, 'rec');
+  const sink = actx.createGain(); sink.gain.value = 0;
+  src.connect(micNode); micNode.connect(sink); sink.connect(actx.destination);
+  micNode.port.onmessage = e => { if (!muted) live.sendAudio(e.data); };
+}
+function b64FromBytes(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function playPcm24k(b64) {
+  const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const pcm = new Int16Array(u8.buffer, 0, u8.length >> 1);
+  const buf = actx.createBuffer(1, pcm.length, 24000), ch = buf.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
+  const s = actx.createBufferSource(); s.buffer = buf; s.connect(outGain);
+  const t = Math.max(playQueueEnd, actx.currentTime + 0.04); s.start(t); playQueueEnd = t + buf.duration;
+  playing.add(s); s.onended = () => playing.delete(s);
+}
+function stopPlayback() { for (const s of playing) { try { s.stop(); } catch {} } playing.clear(); playQueueEnd = 0; }
+function setMuted(m) { muted = m; $('mute').textContent = 'マイク: ' + (m ? 'OFF' : 'ON'); connState = m ? 'マイクOFF' : (live.ready ? '会話中' : connState); drawBubble(); }
+$('mute').onclick = () => setMuted(!muted);
+
+// ---------- Gemini Live API client ----------
+const live = {
+  ws: null, ready: false, wantOpen: false, retries: 0, inTx: '', outTx: '',
+  connect() {
+    const key = $('key').value.trim();
+    if (!key) { status('APIキーが未入力です（Google AI Studio で無料発行できます）'); return; }
+    this.wantOpen = true; this.ready = false;
+    connState = '接続中…'; drawBubble(); status('接続中…');
+    const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key);
+    const ws = this.ws = new WebSocket(url);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ setup: {
+        model: 'models/' + $('model').value.trim(),
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: $('voice').value } } } },
+        systemInstruction: { parts: [{ text: systemPrompt() }] },
+        tools: [{ functionDeclarations: toolDecls }],
+        inputAudioTranscription: {}, outputAudioTranscription: {},
+        contextWindowCompression: { slidingWindow: {} },
+      } }));
+    };
+    ws.onmessage = async ev => {
+      const txt = typeof ev.data === 'string' ? ev.data : await ev.data.text();
+      let msg; try { msg = JSON.parse(txt); } catch { return; }
+      this.handle(msg);
+    };
+    ws.onerror = () => status('通信エラー');
+    ws.onclose = ev => {
+      this.ready = false;
+      const why = ev.reason ? `（${ev.reason}）` : '';
+      log(`切断されました code=${ev.code}${why}`);
+      if (this.wantOpen && this.retries < 3 && ev.code !== 1007 && ev.code !== 1008) {
+        this.retries++; connState = '再接続中…'; drawBubble(); setTimeout(() => this.connect(), 1500);
+      } else { connState = '未接続'; drawBubble(); status('切断されました。設定を確認して再度「接続」を押してください ' + why); }
+    };
+  },
+  handle(msg) {
+    if (msg.setupComplete) {
+      this.ready = true; this.retries = 0; connState = muted ? 'マイクOFF' : '会話中'; drawBubble();
+      status('接続しました。話しかけてみてください'); log('— 接続 —');
+      if (!memory.length) this.sendText('（プレイヤーが初めてこの世界にやってきた。気づいて声をかけて）');
+      else this.sendText('（プレイヤーがまた遊びに来た。覚えていることに触れつつ迎えて）');
+      return;
+    }
+    if (msg.toolCall) {
+      const responses = msg.toolCall.functionCalls.map(fc => {
+        let result; try { result = (tools[fc.name] || (() => ({ ok: false, reason: 'unknown tool' })))(fc.args || {}); } catch (e) { result = { ok: false, reason: String(e) }; }
+        log(`[行動] ${fc.name} ${JSON.stringify(fc.args || {})}`);
+        return { id: fc.id, name: fc.name, response: { result } };
+      });
+      this.send({ toolResponse: { functionResponses: responses } });
+    }
+    if (msg.goAway) { log('サーバーから再接続要求'); try { this.ws.close(); } catch {} }
+    const sc = msg.serverContent; if (!sc) return;
+    if (sc.interrupted) { stopPlayback(); }
+    if (sc.modelTurn?.parts) for (const p of sc.modelTurn.parts) if (p.inlineData?.data) playPcm24k(p.inlineData.data);
+    if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; userText = this.inTx; drawBubble(); }
+    if (sc.outputTranscription?.text) { this.outTx += sc.outputTranscription.text; bubbleText = this.outTx; drawBubble(); }
+    if (sc.turnComplete) {
+      const name = $('name').value || 'ミナ';
+      if (this.inTx.trim()) { remember('プレイヤー: ' + this.inTx.trim()); log('あなた: ' + this.inTx.trim()); }
+      if (this.outTx.trim()) { remember(name + ': ' + this.outTx.trim()); log(name + ': ' + this.outTx.trim()); }
+      this.inTx = ''; this.outTx = '';
+      bubbleClearAt = performance.now() / 1000 + Math.max(4, playQueueEnd - (actx?.currentTime || 0) + 3);
+    }
+  },
+  send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); },
+  sendAudio(int16) { if (!this.ready) return; this.send({ realtimeInput: { audio: { data: b64FromBytes(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } } }); },
+  sendText(t) { if (!this.ready) return; this.send({ clientContent: { turns: [{ role: 'user', parts: [{ text: t }] }], turnComplete: true } }); },
+};
+
+$('start').onclick = async () => {
+  for (const k of ['key', 'name', 'persona', 'voice', 'model']) store.set(k, $(k).value);
+  try { await initAudio(); } catch (e) { status('マイクを使えません: ' + e.message); return; }
+  if (live.ws && live.ws.readyState <= 1) { live.wantOpen = false; live.ws.close(); }
+  live.retries = 0; live.connect();
+};
+
+// ---------- XR input ----------
+const grips = [];
+for (let i = 0; i < 2; i++) {
+  const grip = renderer.xr.getControllerGrip(i);
+  const handMesh = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), std(0xffe0cc, { roughness: 0.6 }));
+  grip.add(handMesh); player.add(grip);
+  const ctrl = renderer.xr.getController(i); player.add(ctrl);
+  grip.userData.holding = null;
+  const grab = () => {
+    const gp = grip.getWorldPosition(new THREE.Vector3());
+    let best = null, bd = 1e9;
+    for (const it of items) { if (it.held && it.held !== 'char') continue; const d = it.mesh.getWorldPosition(tmpV2).distanceTo(gp) - it.r; if (d < 0.12 && d < bd) { bd = d; best = it; } }
+    if (!best) return;
+    if (best.held === 'char') { chr.holding = null; chr.offering = false; setExpression('happy', 4); live.sendText(`（プレイヤーがあなたから${best.name}を受け取った）`); }
+    grip.attach(best.mesh); best.held = grip; grip.userData.holding = best;
+  };
+  const drop = () => { const it = grip.userData.holding; if (!it) return; scene.attach(it.mesh); it.held = null; grip.userData.holding = null; };
+  ctrl.addEventListener('squeezestart', grab); ctrl.addEventListener('squeezeend', drop);
+  ctrl.addEventListener('selectstart', grab); ctrl.addEventListener('selectend', drop);
+  grips.push(grip);
+}
+const btnPrev = {}; let snapReady = true;
+function handleGamepads(dt) {
+  const session = renderer.xr.getSession(); if (!session) return;
+  for (const src of session.inputSources) {
+    const gp = src.gamepad; if (!gp) continue;
+    const ax = gp.axes.length >= 4 ? [gp.axes[2], gp.axes[3]] : [gp.axes[0] || 0, gp.axes[1] || 0];
+    if (src.handedness === 'left') {
+      if (Math.hypot(ax[0], ax[1]) > 0.15) {
+        const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
+        const right = new THREE.Vector3(-dir.z, 0, dir.x);
+        player.position.addScaledVector(dir, -ax[1] * 1.8 * dt).addScaledVector(right, ax[0] * 1.8 * dt);
+      }
+    } else if (src.handedness === 'right') {
+      if (Math.abs(ax[0]) > 0.7 && snapReady) {
+        snapReady = false; const ang = -Math.sign(ax[0]) * Math.PI / 6;
+        const c = camera.getWorldPosition(new THREE.Vector3());
+        player.position.sub(c).applyAxisAngle(new THREE.Vector3(0, 1, 0), ang).add(c); player.rotation.y += ang;
+      } else if (Math.abs(ax[0]) < 0.3) snapReady = true;
+    }
+    const pressed = !!gp.buttons[4]?.pressed, k = src.handedness;
+    if (pressed && !btnPrev[k]) setMuted(!muted);
+    btnPrev[k] = pressed;
+  }
+}
+
+// ---------- desktop controls ----------
+let drag = null; const keys = {};
+renderer.domElement.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointermove', e => {
+  if (!drag || renderer.xr.isPresenting) return;
+  camera.rotation.y -= (e.clientX - drag.x) * 0.004; camera.rotation.x = Math.max(-1.2, Math.min(1.2, camera.rotation.x - (e.clientY - drag.y) * 0.004));
+  drag = { x: e.clientX, y: e.clientY };
+});
+addEventListener('keydown', e => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') keys[e.code] = true; });
+addEventListener('keyup', e => { keys[e.code] = false; });
+function desktopMove(dt) {
+  if (renderer.xr.isPresenting) return;
+  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), r = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  if (!f && !r) return;
+  const y = camera.rotation.y;
+  player.position.x += (-Math.sin(y) * f + Math.cos(y) * r) * 2 * dt;
+  player.position.z += (-Math.cos(y) * f - Math.sin(y) * r) * 2 * dt;
+}
+
+// ---------- character update ----------
+const freq = new Uint8Array(512), wave = new Float32Array(1024);
+let mouthOpen = 0, mouthWide = 1;
+const qPrev = new THREE.Quaternion(), qTgt = new THREE.Quaternion();
+function updateCharacter(dt, t) {
+  const camPos = camera.getWorldPosition(new THREE.Vector3());
+  const root = chr.root;
+  // locomotion
+  if (chr.state === 'walk') {
+    const d = tmpV.copy(chr.target).sub(root.position); d.y = 0; const dist = d.length();
+    if (dist < 0.06) { chr.state = 'idle'; const cb = chr.onArrive; chr.onArrive = null; cb && cb(); }
+    else {
+      root.position.addScaledVector(d.normalize(), Math.min(dist, 0.9 * dt));
+      const yaw = Math.atan2(d.x, d.z); let dy = yaw - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 8);
+      chr.walkPhase += dt * 9;
+    }
+  } else {
+    const dx = camPos.x - root.position.x, dz = camPos.z - root.position.z;
+    if (Math.hypot(dx, dz) > 0.3) { let dy = Math.atan2(dx, dz) - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 2.5); }
+    chr.walkPhase *= 0.9;
+  }
+  const walking = chr.state === 'walk';
+  chr.body.position.y = walking ? Math.abs(Math.sin(chr.walkPhase)) * 0.03 : Math.sin(t * 2) * 0.005;
+  // gestures
+  chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false;
+  if (chr.gesture === 'wave') { armWave = true; if (gT > 2.2) chr.gesture = null; }
+  else if (chr.gesture === 'nod') { nod = Math.sin(gT * 12) * 0.25 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
+  else if (chr.gesture === 'shake') { shake = Math.sin(gT * 14) * 0.3 * Math.max(0, 1 - gT / 1.2); if (gT > 1.2) chr.gesture = null; }
+  else if (chr.gesture === 'jump') { chr.body.position.y += Math.max(0, Math.sin(Math.min(gT, 0.6) / 0.6 * Math.PI)) * 0.25; if (gT > 0.7) chr.gesture = null; }
+  else if (chr.gesture === 'spin') { chr.body.rotation.y = Math.min(gT / 0.9, 1) * Math.PI * 2; if (gT > 0.9) { chr.gesture = null; chr.body.rotation.y = 0; } }
+  // arms
+  const [rArm, lArm] = chr.arms, swing = walking ? Math.sin(chr.walkPhase) * 0.5 : 0;
+  const ease = (o, k, v) => { o[k] += (v - o[k]) * Math.min(1, dt * 10); };
+  if (armWave) { ease(rArm.rotation, 'x', 0); rArm.rotation.z = -2.6 + Math.sin(gT * 12) * 0.35; }
+  else if (chr.holding) { ease(rArm.rotation, 'x', chr.offering ? -1.4 : -0.9); ease(rArm.rotation, 'z', -0.1); }
+  else { ease(rArm.rotation, 'x', swing); ease(rArm.rotation, 'z', -0.12); }
+  ease(lArm.rotation, 'x', -swing); ease(lArm.rotation, 'z', 0.12);
+  if (chr.offering) { chr.offerT -= dt; if (chr.offerT <= 0) { releaseHeld(); live.sendText('（あなたが差し出した物をプレイヤーが受け取らなかったので、床に置いた）'); } }
+  // touch reactions
+  chr.lean = Math.max(0, chr.lean - dt * 1.5);
+  const headPos = chr.head.getWorldPosition(new THREE.Vector3()), torsoPos = chr.torso.getWorldPosition(new THREE.Vector3());
+  for (const g of grips) {
+    if (!renderer.xr.isPresenting) break;
+    const hp = g.getWorldPosition(tmpV2);
+    const now = t;
+    if (hp.distanceTo(headPos) < 0.22) { chr.lean = Math.min(1, chr.lean + dt * 4); if (now - chr.lastTouch > 8) { chr.lastTouch = now; setExpression('shy', 4); live.sendText('（プレイヤーがあなたの頭をなでた）'); } }
+    else if (hp.distanceTo(torsoPos) < 0.25) { chr.lean = Math.min(1, chr.lean + dt * 4); if (now - chr.lastTouch > 8) { chr.lastTouch = now; setExpression('surprised', 3); live.sendText('（プレイヤーがあなたの肩をつついた）'); } }
+  }
+  chr.body.rotation.x = -chr.lean * 0.18;
+  // head look-at (eye contact)
+  qPrev.copy(chr.headPivot.quaternion);
+  if (!walking) { chr.headPivot.lookAt(camPos); qTgt.copy(chr.headPivot.quaternion); } else qTgt.identity();
+  chr.headPivot.quaternion.copy(qPrev).slerp(qTgt, Math.min(1, dt * 6));
+  chr.head.rotation.set(nod, shake, 0);
+  // expression
+  if (chr.exprT > 0) { chr.exprT -= dt; if (chr.exprT <= 0) chr.expr = 'neutral'; }
+  const e = chr.expr;
+  chr.blinkT -= dt; if (chr.blinkT < 0) { chr.blink = 0.15; chr.blinkT = 2 + Math.random() * 4; }
+  chr.blink = Math.max(0, chr.blink - dt);
+  let eyeY = e === 'happy' ? 0.35 : e === 'surprised' ? 1.45 : e === 'shy' ? 0.55 : 1.15;
+  if (chr.blink > 0) eyeY = 0.1;
+  const browRot = e === 'angry' ? 0.35 : e === 'sad' ? -0.35 : 0, browY = e === 'surprised' ? 0.07 : 0.05;
+  chr.eyes.forEach((m, i) => { m.scale.y += (eyeY - m.scale.y) * Math.min(1, dt * 20); });
+  chr.brows.forEach((b, i) => { const s = i === 0 ? -1 : 1; b.rotation.z = s * browRot; b.position.y = browY; });
+  const blushT = (e === 'shy' || e === 'happy') ? 0.6 : 0; chr.blush.forEach(b => { b.material.opacity += (blushT - b.material.opacity) * Math.min(1, dt * 5); });
+  // lip sync: loudness -> jaw open, spectral centroid -> vowel shape (wide = i/e, round = o/u)
+  let level = 0, wide = 1;
+  if (analyser && playing.size) {
+    analyser.getFloatTimeDomainData(wave); let sum = 0; for (let i = 0; i < wave.length; i++) sum += wave[i] * wave[i];
+    level = Math.min(1, Math.sqrt(sum / wave.length) * 6);
+    analyser.getByteFrequencyData(freq); const binHz = actx.sampleRate / analyser.fftSize; let num = 0, den = 0;
+    for (let i = Math.floor(250 / binHz); i < Math.floor(3500 / binHz); i++) { num += i * binHz * freq[i]; den += freq[i]; }
+    const cen = den ? num / den : 1200; wide = THREE.MathUtils.clamp((cen - 900) / 1100, 0.5, 1.6);
+  }
+  mouthOpen += (level - mouthOpen) * Math.min(1, dt * 25); mouthWide += (wide - mouthWide) * Math.min(1, dt * 15);
+  const smile = e === 'happy' ? 1.2 : 1;
+  chr.mouth.scale.set((0.8 + 0.4 * mouthWide) * smile, 0.12 + mouthOpen * 0.9 / Math.max(mouthWide, 0.8), 0.35);
+  // spatial voice
+  if (panner) {
+    const L = actx.listener, cp = camPos, fw = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.getWorldQuaternion(new THREE.Quaternion()));
+    camera.getWorldDirection(fw);
+    if (L.positionX) { L.positionX.value = cp.x; L.positionY.value = cp.y; L.positionZ.value = cp.z; L.forwardX.value = fw.x; L.forwardY.value = fw.y; L.forwardZ.value = fw.z; L.upX.value = up.x; L.upY.value = up.y; L.upZ.value = up.z; }
+    else { L.setPosition(cp.x, cp.y, cp.z); L.setOrientation(fw.x, fw.y, fw.z, up.x, up.y, up.z); }
+    panner.positionX.value = headPos.x; panner.positionY.value = headPos.y; panner.positionZ.value = headPos.z;
+  }
+  // bubble
+  chr.bubble.lookAt(camPos);
+  if (bubbleClearAt && t > bubbleClearAt && !playing.size) { bubbleClearAt = 0; bubbleText = ''; userText = ''; drawBubble(); }
+}
+
+window.__vrc = { live, tools, chr, items }; // for debugging in the console
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05), t = performance.now() / 1000;
+  handleGamepads(dt); desktopMove(dt);
+  updateCharacter(dt, t); updateItems(dt);
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
