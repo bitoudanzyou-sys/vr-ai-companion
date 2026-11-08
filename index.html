@@ -191,35 +191,46 @@ function describeItem(it) {
 const chr = { state: 'idle', target: null, onArrive: null, holding: null, offering: false, offerT: 0,
   expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, walkPhase: 0, lean: 0, lastTouch: 0 };
 {
-  // 24歳・落ち着いた大人の女性（オリジナルデザイン）：色白、すらりとした体型、ニット＋ロングスカート
-  const skin = std(0xfcece4, { roughness: 0.55, emissive: 0xfcece4, emissiveIntensity: 0.32 }), hairM = std(0x16151a, { roughness: 0.5, side: THREE.DoubleSide }); // 黒髪
-  const cloth = std(0xe8ddcc, { roughness: 0.9, emissive: 0xe8ddcc, emissiveIntensity: 0.15 }), skirtM = std(0x47505c, { roughness: 0.85, side: THREE.DoubleSide });
+  // 24歳・落ち着いた大人の女性（オリジナルデザイン）：色白、黒のボブ、黒いレースのハイネック＋花柄のミディスカート
+  const canvasTex = (w, h, draw, rx = 1, ry = 1) => { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+    const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.repeat.set(rx, ry); return tx; };
+  const flower = (g, x, y, r, petal, center, n = 5) => { g.fillStyle = petal; for (let k = 0; k < n; k++) { const a = k / n * Math.PI * 2; g.beginPath(); g.ellipse(x + Math.cos(a) * r * 0.6, y + Math.sin(a) * r * 0.6, r * 0.5, r * 0.28, a, 0, Math.PI * 2); g.fill(); } g.fillStyle = center; g.beginPath(); g.arc(x, y, r * 0.25, 0, Math.PI * 2); g.fill(); };
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const laseDraw = (base, pattern) => (g, w, h) => { g.fillStyle = base; g.fillRect(0, 0, w, h); for (let i = 0; i < 40; i++) flower(g, rnd() * w, rnd() * h, 10 + rnd() * 12, pattern, base, 6); g.strokeStyle = pattern; g.lineWidth = 1; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(rnd() * w, rnd() * h, 4 + rnd() * 8, 0, Math.PI * 2); g.stroke(); } };
+  const laceTex = canvasTex(256, 256, laseDraw('#141217', '#2b2730'), 2, 2);
+  const sleeveTex = canvasTex(256, 256, laseDraw('#5a4644', '#141217'), 1, 2); // 袖は肌が少し透けるレース
+  const skirtTex = canvasTex(512, 256, (g, w, h) => { g.fillStyle = '#2d8a8c'; g.fillRect(0, 0, w, h); for (let i = 0; i < 70; i++) flower(g, rnd() * w, rnd() * h, 9 + rnd() * 9, rnd() < 0.8 ? '#f4efe6' : '#e9b9c0', rnd() < 0.5 ? '#c0392b' : '#e0a030'); }, 3, 1);
+  const skin = std(0xfcece4, { roughness: 0.55, emissive: 0xfcece4, emissiveIntensity: 0.32 }), hairM = std(0x101017, { roughness: 0.35, side: THREE.DoubleSide }); // 黒髪
+  const cloth = new THREE.MeshStandardMaterial({ map: laceTex, roughness: 0.8, emissive: 0xffffff, emissiveMap: laceTex, emissiveIntensity: 0.25 });
+  const sleeve = new THREE.MeshStandardMaterial({ map: sleeveTex, roughness: 0.8, emissive: 0xffffff, emissiveMap: sleeveTex, emissiveIntensity: 0.25 });
+  const skirtM = new THREE.MeshStandardMaterial({ map: skirtTex, roughness: 0.85, side: THREE.DoubleSide, emissive: 0xffffff, emissiveMap: skirtTex, emissiveIntensity: 0.18 });
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
   for (const sx of [-1, 1]) {
     const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.04, 0.8), skin); leg.position.set(sx * 0.065, 0.4, 0); body.add(leg);
-    const shoe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x5a4a40)); shoe.rotation.x = Math.PI / 2; shoe.position.set(sx * 0.065, 0.035, 0.03); body.add(shoe);
+    const shoe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x111114, { roughness: 0.4 })); shoe.rotation.x = Math.PI / 2; shoe.position.set(sx * 0.065, 0.035, 0.03); body.add(shoe);
   }
-  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.27, 0.72, 28, 1, true), skirtM); skirt.position.y = 0.6; body.add(skirt);
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.29, 0.62, 32, 1, true), skirtM); skirt.position.y = 0.66; body.add(skirt); // ミディ丈
   const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.34, 8, 20), cloth); torso.position.y = 1.15; torso.scale.set(1.05, 1, 0.82); body.add(torso);
-  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 8, 20), cloth); collar.rotation.x = Math.PI / 2; collar.position.y = 1.43; body.add(collar);
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.06, 0.1, 20), cloth); collar.position.y = 1.46; body.add(collar); // ハイネック
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.04, 0.14), skin); neck.position.y = 1.48; body.add(neck);
   const arms = [];
   for (const sx of [-1, 1]) { // sx=-1 is character's right (faces +Z)
     const pivot = new THREE.Group(); pivot.position.set(sx * 0.155, 1.37, 0);
     const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), cloth); pivot.add(shoulder); // 肩でつなぐ
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.032, 0.5, 14), cloth); arm.position.y = -0.25; pivot.add(arm);
-    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 6, 14), cloth); cuff.rotation.x = Math.PI / 2; cuff.position.y = -0.49; pivot.add(cuff);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.044, 0.036, 0.5, 14), sleeve); arm.position.y = -0.25; pivot.add(arm);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.01, 6, 14), cloth); cuff.rotation.x = Math.PI / 2; cuff.position.y = -0.49; pivot.add(cuff);
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), skin); hand.scale.set(0.8, 1.25, 0.6); hand.position.y = -0.54; pivot.add(hand);
     pivot.userData.hand = hand; body.add(pivot); arms.push(pivot);
   }
   const headPivot = new THREE.Group(); headPivot.position.y = 1.53; body.add(headPivot);
   const head = new THREE.Group(); head.position.y = 0.12; head.scale.setScalar(0.93); headPivot.add(head);
   head.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 24), skin));
-  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), hairM); hairTop.position.y = 0.01; head.add(hairTop);
-  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 16, Math.PI, Math.PI, 0, Math.PI * 0.64), hairM); hairBack.scale.set(1.04, 1.02, 1.06); hairBack.position.y = -0.005; head.add(hairBack); // ショートカット
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.41), hairM); hairTop.position.y = 0.01; head.add(hairTop);
+  const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 16, Math.PI * 0.92, Math.PI * 1.16, 0, Math.PI * 0.74), hairM); hairBack.scale.set(1.06, 1.02, 1.06); hairBack.position.y = -0.005; head.add(hairBack); // あご丈のボブ
+  for (const sx of [-1, 1]) { const side = new THREE.Mesh(new THREE.CapsuleGeometry(0.04, 0.12, 4, 10), hairM); side.scale.set(0.55, 1, 1.5); side.position.set(sx * 0.158, -0.045, 0.04); side.rotation.z = sx * -0.08; head.add(side); }
   // ---- face: 白目＋虹彩＋瞳孔＋ハイライト、笑い目、眉、頬、口の形 ----
   const basic = c => new THREE.MeshBasicMaterial({ color: c });
-  const whiteM = basic(0xfdfcfa), irisM = basic(0x3b2618), pupilM = basic(0x120a08), lineM = basic(0x2a1d22);
+  const whiteM = basic(0xfdfcfa), irisM = basic(0x22160f), pupilM = basic(0x120a08), lineM = basic(0x2a1d22);
   const eyes = [], irises = [], smileEyes = [], brows = [], blush = [], blushLines = [];
   for (const sx of [-1, 1]) {
     const eye = new THREE.Group(); eye.position.set(sx * 0.056, -0.008, 0.143); eye.rotation.set(0, sx * 0.33, sx * 0.08); head.add(eye); eyes.push(eye);
@@ -229,7 +240,7 @@ const chr = { state: 'idle', target: null, onArrive: null, holding: null, offeri
     const pu = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 12, 8), pupilM); pu.scale.set(1, 1.1, 0.3); pu.position.z = 0.003; iris.add(pu);
     const hl1 = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), whiteM); hl1.position.set(0.006, 0.009, 0.007); iris.add(hl1);
     const hl2 = new THREE.Mesh(new THREE.SphereGeometry(0.0028, 8, 6), whiteM); hl2.position.set(-0.006, -0.008, 0.007); iris.add(hl2);
-    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0035, 6, 20, Math.PI * 0.8), lineM); lash.rotation.z = Math.PI * 0.08; lash.scale.set(1.15, 0.85, 1); lash.position.z = 0.009; eye.add(lash);
+    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0048, 6, 20, Math.PI * 0.8), lineM); lash.rotation.z = Math.PI * 0.08; lash.scale.set(1.15, 0.85, 1); lash.position.z = 0.009; eye.add(lash);
     // 笑い目「^」
     const se = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0035, 6, 20, Math.PI), lineM); se.scale.set(1, 0.7, 1); se.position.copy(eye.position); se.position.y -= 0.006; se.position.z = 0.153; se.rotation.y = sx * 0.33; se.visible = false; head.add(se); smileEyes.push(se);
     const b = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.005, 0.01), lineM); b.position.set(sx * 0.058, 0.044, 0.152); b.rotation.y = sx * 0.33; head.add(b); brows.push(b);
@@ -240,10 +251,12 @@ const chr = { state: 'idle', target: null, onArrive: null, holding: null, offeri
       ln.position.set(sx * (0.077 + k * 0.011), -0.046, 0.137 - k * 0.004); ln.rotation.set(0, sx * 0.6, -0.5); head.add(ln); blushLines.push(ln);
     }
   }
-  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), basic(0xb04a5a)); // 話している時の口
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), basic(0xb83a46)); // 話している時の口
   mouth.position.set(0, -0.08, 0.146); mouth.scale.set(0.85, 0.15, 0.35); head.add(mouth);
-  const smileMouth = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 20, Math.PI), basic(0x9a4050)); smileMouth.rotation.z = Math.PI; smileMouth.position.set(0, -0.068, 0.15); head.add(smileMouth);
+  const smileMouth = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0042, 6, 20, Math.PI), basic(0xc8505a)); smileMouth.rotation.z = Math.PI; smileMouth.position.set(0, -0.068, 0.15); head.add(smileMouth);
   const frownMouth = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0035, 6, 20, Math.PI), lineM); frownMouth.position.set(0, -0.088, 0.148); frownMouth.visible = false; head.add(frownMouth);
+  const mole = new THREE.Mesh(new THREE.SphereGeometry(0.0032, 8, 6), basic(0x3a2622)); mole.position.set(0.034, -0.104, 0.118); head.add(mole); // 口元のほくろ
+  for (const sx of [-1, 1]) { const ear = new THREE.Mesh(new THREE.OctahedronGeometry(0.011), std(0xd8dde4, { metalness: 0.9, roughness: 0.2 })); ear.position.set(sx * 0.15, -0.075, 0.0); head.add(ear); } // 小さなピアス
   // speech bubble
   const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 1024; bubbleCanvas.height = 320;
   const bubbleTex = new THREE.CanvasTexture(bubbleCanvas); bubbleTex.colorSpace = THREE.SRGBColorSpace;
