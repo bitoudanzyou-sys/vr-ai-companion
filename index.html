@@ -54,6 +54,15 @@
   #drinks { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:8px; }
   #drinks button { border-radius:12px; text-align:left; padding:10px 12px; }
   #drinks small { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+  #order.iz { width:min(720px, calc(100vw - 24px)); }
+  #tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  #tabs button { padding:6px 12px; font-size:13px; }
+  #tabs button.on { background:var(--accent); color:#2a1d10; border-color:var(--accent); }
+  #order.iz #drinks { grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); max-height:min(52vh, 420px); overflow:auto; }
+  #drinks .card { padding:0; overflow:hidden; text-align:left; border-radius:12px; }
+  #drinks .card img { display:block; width:100%; aspect-ratio:4/3; object-fit:cover; background:#2a221c; }
+  #drinks .card div { padding:7px 10px 9px; font-size:13px; }
+  #drinks .card .price { float:right; color:var(--accent); font-size:12px; }
   #order .opt { margin-top:12px; font-size:13px; color:var(--muted); display:flex; align-items:center; gap:8px; }
 
   /* 設定 */
@@ -178,7 +187,8 @@
 <div id="fade"></div>
 
 <div id="order" class="glass">
-  <h3>メニュー</h3>
+  <h3 id="menuTitle">メニュー</h3>
+  <div id="tabs"></div>
   <div id="drinks"></div>
   <label class="opt"><input type="checkbox" id="orderForMina" checked> ミナの飲み物も頼む（ミナが自分で選ぶ）</label>
 </div>
@@ -458,7 +468,20 @@ function streetLamp(x, z, h = 3.2, on = 1.4) {
   const pl = new THREE.PointLight(0xffc98a, 0, 9, 1.5); pl.position.set(x, h, z); P.add(pl);
   lamps.push({ pl, on, bulb });
 }
-const signTex = (word, bg, fg = '#fff') => canvasTex(128, 384, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; g.font = 'bold 84px serif'; const cs = [...word]; const step = Math.min(110, (h - 40) / cs.length); cs.forEach((c, i) => g.fillText(c, 22, 100 + i * step)); });
+// 縦書き：伸ばし棒などは90度回し、小さい「ゃ・っ」などは右上に寄せる
+function vtext(g, str, cx, top, size, maxH) {
+  const cs = [...str], step = Math.min(size * 1.08, maxH / cs.length);
+  g.save(); g.font = `bold ${size}px "Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  cs.forEach((c, i) => {
+    const cy = top + step * (i + 0.5);
+    if ('ーｰ－—〜～…‥（）「」'.includes(c)) { g.save(); g.translate(cx, cy); g.rotate(Math.PI / 2); g.fillText(c, 0, 0); g.restore(); }
+    else if ('ゃゅょっぁぃぅぇぉャュョッァィゥェォ'.includes(c)) g.fillText(c, cx + size * 0.14, cy - size * 0.14);
+    else if ('、。'.includes(c)) g.fillText(c, cx + size * 0.32, cy - size * 0.32);
+    else g.fillText(c, cx, cy);
+  });
+  g.restore();
+}
+const signTex = (word, bg, fg = '#fff') => canvasTex(128, 384, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; vtext(g, word, w / 2, 24, 84, h - 48); });
 const tileTex = (base, line, rx, ry) => canvasTex(256, 256, (g, w, h) => { g.fillStyle = base; g.fillRect(0, 0, w, h); g.strokeStyle = line; g.lineWidth = 3; for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(0, i * 64); g.lineTo(w, i * 64); g.stroke(); g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, h); g.stroke(); } for (let i = 0; i < 400; i++) { g.fillStyle = `rgba(0,0,0,${rnd() * 0.06})`; g.fillRect(rnd() * w, rnd() * h, 3, 3); } }, rx, ry);
 const groundPlane = (tex, w, d, z = 0) => { const m = add(new THREE.PlaneGeometry(w, d), std(0xffffff, { map: tex, roughness: 0.9 }), 0, 0, z); m.rotation.x = -Math.PI / 2; return m; };
 const tree = (x, z, s = 1, col = 0x4f7d45) => { add(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 1.6 * s), std(0x5a4030), x, 0.8 * s, z); const lm = std(col, { roughness: 0.8 }); for (let i = 0; i < 6; i++) add(new THREE.SphereGeometry((0.55 + rnd() * 0.35) * s, 10, 8), lm, x + (rnd() - .5) * 0.9 * s, (1.9 + rnd() * 0.9) * s, z + (rnd() - .5) * 0.9 * s); };
@@ -571,20 +594,42 @@ P = groups.izakaya;
   const right = add(new THREE.PlaneGeometry(D, H), wallM, W / 2, H / 2, 0.6); right.rotation.y = -Math.PI / 2;
   const front = add(new THREE.PlaneGeometry(W, H), wallM, 0, H / 2, 3.6); front.rotation.y = Math.PI;
   // 二人のテーブルと椅子（カフェと同じ高さ）
-  add(new THREE.BoxGeometry(0.9, 0.04, 0.75), std(0x8a5a38, { roughness: 0.5 }), 0, 0.715, 0);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.BoxGeometry(0.05, 0.7, 0.05), darkWood, sx * 0.4, 0.35, sz * 0.33);
+  add(new THREE.BoxGeometry(1.15, 0.04, 0.82), std(0x8a5a38, { roughness: 0.5 }), 0, 0.715, 0);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) add(new THREE.BoxGeometry(0.05, 0.7, 0.05), darkWood, sx * 0.52, 0.35, sz * 0.36);
   add(new THREE.BoxGeometry(0.42, 0.04, 0.4), wood, 0, 0.45, -0.6); for (const sx of [-1, 1]) for (const sz of [-1, 1]) add(new THREE.BoxGeometry(0.04, 0.45, 0.04), darkWood, sx * 0.18, 0.225, -0.6 + sz * 0.17);
+  // 酒瓶（一升瓶・四合瓶・焼酎・ウイスキー）。ラベルの言葉は一般名詞だけ
+  const LABELS = ['純米', '吟醸', '辛口', '本醸造', '芋', '麦', '黒', '米', '梅酒', '原酒', '生酒', '泡盛'];
+  const labelTex = {};
+  const getLabel = w => labelTex[w] ||= canvasTex(256, 128, (g, cw, ch) => { g.fillStyle = '#efe6d0'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#b8291e'; g.fillRect(0, 0, cw, 10); g.fillStyle = '#1e1610'; for (const cx of [cw * 0.25, cw * 0.75]) vtext(g, w, cx, 16, 34, ch - 24); });
+  const PROFILES = {
+    issho: [[0, 0], [0.045, 0], [0.047, 0.02], [0.047, 0.27], [0.04, 0.31], [0.019, 0.35], [0.016, 0.41], [0.019, 0.42], [0, 0.42]],
+    yongo: [[0, 0], [0.037, 0], [0.039, 0.02], [0.039, 0.18], [0.03, 0.22], [0.014, 0.25], [0.013, 0.3], [0.015, 0.31], [0, 0.31]],
+    shochu: [[0, 0], [0.042, 0], [0.044, 0.02], [0.044, 0.15], [0.036, 0.19], [0.015, 0.22], [0.014, 0.26], [0, 0.26]],
+  };
+  const lathes = {}; for (const [k, pts] of Object.entries(PROFILES)) lathes[k] = new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(p[0], p[1])), 18);
+  const glassCols = [0x23452c, 0x4a2a12, 0x1b2a3e, 0x2b2b2b, 0xd8d2c0];
+  function bottle(x, y, z) {
+    const kind = pick(['issho', 'issho', 'yongo', 'yongo', 'shochu', 'whisky']);
+    const col = glassCols[Math.floor(rnd() * glassCols.length)], gm = new THREE.MeshStandardMaterial({ color: col, roughness: 0.12, metalness: 0.1 });
+    const s = new THREE.Group(); s.position.set(x, y, z); s.rotation.y = (rnd() - 0.5) * 0.4; P.add(s);
+    if (kind === 'whisky') { add(new THREE.BoxGeometry(0.07, 0.17, 0.05), new THREE.MeshStandardMaterial({ color: 0xa8641e, roughness: 0.1, transparent: true, opacity: 0.85 }), 0, 0.085, 0, s); add(new THREE.CylinderGeometry(0.012, 0.014, 0.06, 10), gm, 0, 0.2, 0, s); add(new THREE.CylinderGeometry(0.016, 0.016, 0.02, 10), std(0x1a1a1a), 0, 0.235, 0, s); add(new THREE.PlaneGeometry(0.05, 0.06), std(0xffffff, { map: getLabel(pick(LABELS)) }), 0, 0.08, 0.026, s); return; }
+    add(lathes[kind], gm, 0, 0, 0, s);
+    const top = PROFILES[kind].at(-1)[1], r = PROFILES[kind][2][0];
+    add(new THREE.CylinderGeometry(0.017, 0.017, 0.02, 10), std(rnd() < 0.5 ? 0xd8b04a : 0x1a1a1a, { metalness: 0.5 }), 0, top + 0.005, 0, s);
+    const lh = kind === 'shochu' ? 0.09 : 0.11, ly = kind === 'issho' ? 0.15 : 0.1;
+    add(new THREE.CylinderGeometry(r * 1.02, r * 1.02, lh, 18, 1, true), std(0xffffff, { map: getLabel(pick(LABELS)), roughness: 0.9 }), 0, ly, 0, s);
+  }
   // 奥のカウンターと酒瓶の棚
   add(new THREE.BoxGeometry(4.2, 1.0, 0.6), darkWood, 0.6, 0.5, -1.6); add(new THREE.BoxGeometry(4.4, 0.06, 0.7), std(0xa87a4e, { roughness: 0.4 }), 0.6, 1.03, -1.6);
   for (const y of [1.4, 1.8]) {
     add(new THREE.BoxGeometry(4, 0.04, 0.25), wood, 0.6, y, -2.28);
-    for (let x = -1.3; x < 2.5; x += 0.16 + rnd() * 0.06) { const h = 0.22 + rnd() * 0.12; add(new THREE.CylinderGeometry(0.035, 0.04, h, 10), std([0x2f5a3a, 0x6b3a20, 0xe8e2d6, 0x203a5a, 0x8a6a2a][Math.floor(rnd() * 5)], { roughness: 0.25 }), x, y + 0.02 + h / 2, -2.28); }
+    for (let x = -1.25; x < 2.45; x += 0.15 + rnd() * 0.07) bottle(x, y + 0.02, -2.28);
   }
   for (let i = 0; i < 4; i++) add(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 16), std(0x2e2320), -0.8 + i * 0.95, 0.64, -1.05);
   // 壁のお品書き（短冊）
-  const items = ['焼き鳥', '枝豆', 'だし巻き', '冷奴', '唐揚げ', '生ビール', 'ハイボール', '日本酒', 'ウーロン茶'];
-  items.forEach((w, i) => { const tx = canvasTex(96, 384, (g, cw, ch) => { g.fillStyle = '#efe4c8'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#2a1d12'; g.font = 'bold 64px serif'; [...w].forEach((c, k) => g.fillText(c, 16, 80 + k * 70)); });
-    const m = add(new THREE.PlaneGeometry(0.16, 0.6), std(0xffffff, { map: tx }), -W / 2 + 0.02, 1.85, -1.6 + i * 0.22); m.rotation.y = Math.PI / 2; });
+  const items = ['お通し', '枝豆', '冷奴', 'たこわさ', '焼き鳥', 'ほっけ焼き', '唐揚げ', 'アジフライ', '刺身三点盛り', 'だし巻き卵', 'もつ煮込み', 'ポテトサラダ', '焼きおにぎり', '生ビール', 'ハイボール', 'レモンサワー', '日本酒', '梅酒ロック', 'ウーロン茶'];
+  items.forEach((w, i) => { const tx = canvasTex(96, 512, (g, cw, ch) => { g.fillStyle = i >= 13 ? '#f3e1b0' : '#efe4c8'; g.fillRect(0, 0, cw, ch); g.fillStyle = '#2a1d12'; vtext(g, w, cw / 2, 20, Math.min(64, (ch - 40) / [...w].length), ch - 40); });
+    const m = add(new THREE.PlaneGeometry(0.13, 0.7), std(0xffffff, { map: tx }), -W / 2 + 0.02, 1.85, -2.05 + i * 0.165); m.rotation.y = Math.PI / 2; });
   // 赤ちょうちん
   const lanternTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#c8331f'; g.fillRect(0, 0, w, h); g.fillStyle = '#1a1210'; g.font = 'bold 120px serif'; g.fillText('酒', 70, 170); g.fillRect(0, 0, w, 14); g.fillRect(0, h - 14, w, 14); });
   for (const [x, z] of [[-1.6, -0.6], [1.6, -0.6], [0.6, -1.4]]) {
@@ -615,41 +660,41 @@ const STORY = {
   c1: { loc: 'cafe', title: '第1話　窓際の約束', narr: 'カップが半分くらい空いたころ、ミナがスマホの画面をこちらに向けた。',
     mina: '最近見つけた商店街の小さなお店が気になっていて、一緒に行ってみない？と誘う',
     choices: [
-      { t: '行ってみたい。どんなところか楽しみ', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは楽しみだと言った。うれしそうに反応する' },
-      { t: '今日はここでもう少しゆっくりしたいな', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーは正直に、今日はここでゆっくりしたいと言った。気持ちを言ってくれたことがうれしくて、じゃあまた今度ね、と笑う' },
-      { t: 'ミナが行きたいなら付き合うよ', aff: 0, v: { 配慮: 2 }, react: 'プレイヤーは「ミナが行きたいなら」と言った。ありがとうと言いつつ、あなた自身はどうしたいの？と少しだけ聞く' },
-      { t: '先に口コミを調べてみようか', aff: 0, v: { 安定: 1, 解決: 1 }, react: 'プレイヤーは先に口コミを調べようと言った。しっかりしてるね、と笑いつつ、わからないまま行くのも楽しいかもと言う' },
+      { t: '行ってみたい。どんなところか楽しみ', rx: "ミナの顔がぱっと明るくなった。「ほんと？　よかった。じゃあ、これ飲んだら行こ」", ex: 'happy', ge: 'nod', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは楽しみだと言った。うれしそうに反応する' },
+      { t: '今日はここでもう少しゆっくりしたいな', rx: "ミナは少し目を丸くしてから、ふっと笑った。「うん、そういうの言ってくれるの、うれしい。今日はのんびりしよっか」", ex: 'happy', ge: 'tilt', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーは正直に、今日はここでゆっくりしたいと言った。気持ちを言ってくれたことがうれしくて、じゃあまた今度ね、と笑う' },
+      { t: 'ミナが行きたいなら付き合うよ', rx: "「ありがと」と言いながら、ミナはこちらの顔をのぞきこんだ。「でも、あなたはどうしたい？」", ex: 'neutral', ge: 'tilt', aff: 0, v: { 配慮: 2 }, react: 'プレイヤーは「ミナが行きたいなら」と言った。ありがとうと言いつつ、あなた自身はどうしたいの？と少しだけ聞く' },
+      { t: '先に口コミを調べてみようか', rx: "「しっかりしてるなあ」とミナは笑って、スマホを少し引っこめた。「知らないまま行くのも、けっこう好きなんだけどね」", ex: 'neutral', ge: 'shake', aff: 0, v: { 安定: 1, 解決: 1 }, react: 'プレイヤーは先に口コミを調べようと言った。しっかりしてるね、と笑いつつ、わからないまま行くのも楽しいかもと言う' },
     ], unlock: ['street'], next: 'c2' },
   c2: { loc: 'street', title: '第2話　古道具屋のオルゴール', narr: '商店街の端に、古い雑貨やレコードが並ぶ小さな店があった。ミナは店先の木のオルゴールの前で足を止めた。',
     mina: '小さなオルゴールを手に取って、ネジを巻いたときの音がなんだか懐かしいと話す',
     choices: [
-      { t: 'それ、プレゼントさせて', aff: 1, flag: 'musicbox', v: { つながり: 2 }, react: 'プレイヤーがオルゴールをプレゼントすると言った。驚いて、少し遠慮しながらも、照れて受け取る' },
-      { t: 'その音、どんな思い出があるの？', aff: 2, v: { 共感: 2 }, react: 'プレイヤーは音にまつわる思い出を聞いてくれた。小さいころの思い出を少しだけ話す' },
-      { t: '気に入ったなら、迷わず買っちゃえば？', aff: 0, v: { 挑戦: 1, 解決: 1 }, react: 'プレイヤーは迷わず買えばと背中を押した。うーん、と笑って、迷う時間も好きなんだと言う' },
-      { t: '正直、古い物ってあまりピンとこないかも', aff: 1, v: { 正直: 2 }, react: 'プレイヤーは正直に、古い物はピンとこないと言った。そういうの言ってくれるの好き、と笑って、どんな物にときめくのか聞き返す' },
+      { t: 'それ、プレゼントさせて', rx: "「えっ、いいの？」ミナは両手でオルゴールを包んで、少しうつむいた。「……大事にするね」", ex: 'shy', aff: 1, flag: 'musicbox', v: { つながり: 2 }, react: 'プレイヤーがオルゴールをプレゼントすると言った。驚いて、少し遠慮しながらも、照れて受け取る' },
+      { t: 'その音、どんな思い出があるの？', rx: "ミナはネジをもう一度巻いて、音に耳をすませた。「小さいころ、おばあちゃんの家にね……」と、ゆっくり話しはじめる。", ex: 'happy', ge: 'nod', aff: 2, v: { 共感: 2 }, react: 'プレイヤーは音にまつわる思い出を聞いてくれた。小さいころの思い出を少しだけ話す' },
+      { t: '気に入ったなら、迷わず買っちゃえば？', rx: "「うーん」とミナはオルゴールを見つめたまま笑った。「迷ってる時間も、けっこう好きなんだ」", ex: 'neutral', ge: 'tilt', aff: 0, v: { 挑戦: 1, 解決: 1 }, react: 'プレイヤーは迷わず買えばと背中を押した。うーん、と笑って、迷う時間も好きなんだと言う' },
+      { t: '正直、古い物ってあまりピンとこないかも', rx: "ミナはくすっと笑った。「そういう正直なとこ、いいね。じゃあ、あなたは何にときめくの？」", ex: 'happy', ge: 'tilt', aff: 1, v: { 正直: 2 }, react: 'プレイヤーは正直に、古い物はピンとこないと言った。そういうの言ってくれるの好き、と笑って、どんな物にときめくのか聞き返す' },
     ], unlock: ['park'], next: 'c3' },
   c3: { loc: 'park', title: '第3話　ベンチの話', narr: '公園のベンチ。ミナはしばらく黙って池を眺めていた。',
     mina: '最近仕事で少し疲れていて、うまく言葉にできないけど、こうしてぼーっとできる時間がありがたいと打ち明ける',
     choices: [
-      { t: 'うん。急がなくていいから、聞かせて', aff: 2, v: { 共感: 1, 穏やか: 1 }, react: 'プレイヤーは急かさずに聞くと言った。安心して、少しずつ話す' },
-      { t: 'こうしたら少し楽になるかも', aff: 0, v: { 解決: 2 }, react: 'プレイヤーは解決策を提案した。ありがたく受け取りつつ、今は聞いてほしかっただけかも、と正直に少し笑う' },
-      { t: '実は自分も最近、同じように疲れてる', aff: 2, v: { 正直: 1, つながり: 1 }, react: 'プレイヤーも疲れていると打ち明けた。驚いて、じゃあ一緒にぼーっとしよう、と隣で肩の力を抜く' },
-      { t: 'いっそ環境を変えるのもありだと思う', aff: 1, v: { 自由: 1, 挑戦: 1 }, react: 'プレイヤーは環境を変えるのもありだと言った。考えたこともなかった、と少し真剣な顔になる' },
+      { t: 'うん。急がなくていいから、聞かせて', rx: "ミナは小さく息をはいて、肩の力を抜いた。「……ありがと。じゃあ、ちょっとだけね」", ex: 'shy', ge: 'nod', aff: 2, v: { 共感: 1, 穏やか: 1 }, react: 'プレイヤーは急かさずに聞くと言った。安心して、少しずつ話す' },
+      { t: 'こうしたら少し楽になるかも', rx: "ミナは「なるほどね」とうなずいてから、少し照れたように笑った。「でも今は、聞いてほしかっただけかも」", ex: 'neutral', ge: 'nod', aff: 0, v: { 解決: 2 }, react: 'プレイヤーは解決策を提案した。ありがたく受け取りつつ、今は聞いてほしかっただけかも、と正直に少し笑う' },
+      { t: '実は自分も最近、同じように疲れてる', rx: "「え、そうなの？」ミナはこちらを見て、ほっとしたように笑った。「じゃあ、一緒にぼーっとしよ」", ex: 'happy', ge: 'tilt', aff: 2, v: { 正直: 1, つながり: 1 }, react: 'プレイヤーも疲れていると打ち明けた。驚いて、じゃあ一緒にぼーっとしよう、と隣で肩の力を抜く' },
+      { t: 'いっそ環境を変えるのもありだと思う', rx: "ミナは池を見たまま、しばらく黙った。「……考えたこともなかった。ちょっと、考えてみる」", ex: 'surprised', aff: 1, v: { 自由: 1, 挑戦: 1 }, react: 'プレイヤーは環境を変えるのもありだと言った。考えたこともなかった、と少し真剣な顔になる' },
     ], unlock: ['station'], next: 'c4' },
   c4: { loc: 'station', title: '第4話　改札の前で', narr: '駅前の時計が六時を回った。改札の前で、ミナは少しだけ立ち止まった。',
     mina: '今日は楽しかった、でももう少しだけ一緒にいたい気もする、と遠回しに言う',
     choices: [
-      { t: '駅の裏の居酒屋で、軽く一杯どう？', aff: 1, v: { つながり: 1, 自由: 1 }, react: 'プレイヤーが居酒屋に誘った。いいね、と笑ってうなずく', next: 'c5', unlock: ['izakaya'] },
-      { t: '川沿いを少し歩こうか', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーが川沿いを歩こうと誘った。うれしそうにうなずく', next: 'c6', unlock: ['river', 'izakaya'] },
-      { t: '今日はここで。また会おう', aff: 0, v: { ひとり: 1, 安定: 1 }, react: 'プレイヤーは今日はここで解散しようと言った。少し寂しそうに、でも笑って、次は駅の裏の居酒屋に行ってみたいと言う', next: 'c5', unlock: ['izakaya'] },
+      { t: '駅の裏の居酒屋で、軽く一杯どう？', rx: "「いいね！」ミナは改札から一歩はなれて、くるりとこちらを向いた。「ちょうど、もうちょっと話したかったんだ」", ex: 'happy', ge: 'nod', aff: 1, v: { つながり: 1, 自由: 1 }, react: 'プレイヤーが居酒屋に誘った。いいね、と笑ってうなずく', next: 'c5', unlock: ['izakaya'] },
+      { t: '川沿いを少し歩こうか', rx: "ミナはうれしそうにうなずいて、川のほうを指さした。「夜の川、好きなんだ」", ex: 'happy', ge: 'nod', aff: 1, v: { 穏やか: 2 }, react: 'プレイヤーが川沿いを歩こうと誘った。うれしそうにうなずく', next: 'c6', unlock: ['river', 'izakaya'] },
+      { t: '今日はここで。また会おう', rx: "「そっか」ミナは少しだけ寂しそうに笑って、手をふった。「次は、駅の裏の居酒屋に行ってみたいな」", ex: 'sad', ge: 'wave', aff: 0, v: { ひとり: 1, 安定: 1 }, react: 'プレイヤーは今日はここで解散しようと言った。少し寂しそうに、でも笑って、次は駅の裏の居酒屋に行ってみたいと言う', next: 'c5', unlock: ['izakaya'] },
     ] },
   c5: { loc: 'izakaya', title: '第5話　赤ちょうちんの下で', narr: '焼き鳥の煙がゆっくり流れていく。グラスを合わせたあと、ミナが少し真面目な顔でこちらを見た。',
     mina: 'もし何でもできるとしたら、これから先どんなふうに生きたい？と聞く',
     choices: [
-      { t: '自分のペースで、自由に働いて暮らしたい', aff: 1, v: { 自由: 2 }, react: 'プレイヤーは自由に自分のペースで生きたいと言った。その気持ちを大事にしてほしい、と言って、なぜそう思うのかを優しく聞く' },
-      { t: '大切な人と、穏やかな毎日を続けたい', aff: 1, v: { 穏やか: 1, つながり: 1 }, react: 'プレイヤーは大切な人と穏やかに暮らしたいと言った。いいね、と微笑んで、その「穏やかさ」ってどんな時間か聞く' },
-      { t: 'まだよくわからない。探しているところ', aff: 2, v: { 正直: 2 }, react: 'プレイヤーは正直に、まだわからないと言った。それが一番本当っぽい、と笑って、最近少しでも心が動いたことを聞く' },
-      { t: '誰かの役に立つことを、形にしたい', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは誰かの役に立つことを形にしたいと言った。かっこいい、と言いながら、その「誰か」って誰が浮かぶか聞く' },
+      { t: '自分のペースで、自由に働いて暮らしたい', rx: "ミナはグラスを置いて、まっすぐこちらを見た。「いいね。……どうしてそう思うようになったの？」", ex: 'happy', ge: 'nod', aff: 1, v: { 自由: 2 }, react: 'プレイヤーは自由に自分のペースで生きたいと言った。その気持ちを大事にしてほしい、と言って、なぜそう思うのかを優しく聞く' },
+      { t: '大切な人と、穏やかな毎日を続けたい', rx: "ミナはやわらかく笑った。「その『穏やか』って、あなたにとってどんな時間？」", ex: 'happy', ge: 'tilt', aff: 1, v: { 穏やか: 1, つながり: 1 }, react: 'プレイヤーは大切な人と穏やかに暮らしたいと言った。いいね、と微笑んで、その「穏やかさ」ってどんな時間か聞く' },
+      { t: 'まだよくわからない。探しているところ', rx: "「それ、いちばん本当っぽい」ミナはうれしそうに笑った。「最近、ちょっとでも心が動いたことってある？」", ex: 'happy', ge: 'nod', aff: 2, v: { 正直: 2 }, react: 'プレイヤーは正直に、まだわからないと言った。それが一番本当っぽい、と笑って、最近少しでも心が動いたことを聞く' },
+      { t: '誰かの役に立つことを、形にしたい', rx: "「かっこいいな」ミナは頬杖をついた。「その『誰か』って、誰の顔が浮かぶ？」", ex: 'happy', ge: 'tilt', aff: 1, v: { 挑戦: 1, つながり: 1 }, react: 'プレイヤーは誰かの役に立つことを形にしたいと言った。かっこいい、と言いながら、その「誰か」って誰が浮かぶか聞く' },
     ], unlock: ['river'], next: 'c6' },
   c6: { loc: 'river', title: '最終話　川沿いの夜', narr: '水面に街の灯りが揺れている。ミナは手すりに手を置いて、こちらを振り返った。',
     mina: () => {
@@ -659,9 +704,9 @@ const STORY = {
         + (top ? `。今日の話から、あなたは「${top}」を大事にしている人なのかも、と決めつけずにそっと伝える` : '');
     },
     choices: [
-      { t: 'もちろん。また来よう', aff: 1, v: { つながり: 1 }, react: 'プレイヤーは「もちろん、また来よう」と答えた。安心したように笑う' },
-      { t: '（だまって手を差し出す）', aff: 2, v: { つながり: 1 }, react: 'プレイヤーは黙って手を差し出した。少し驚いて、そっと手をつなぐ', expr: 'shy' },
-      { t: '今日、自分のことが少しわかった気がする', aff: 2, v: { 正直: 1 }, react: 'プレイヤーは、今日自分のことが少しわかった気がすると言った。うれしそうに、何がわかったのか聞く' },
+      { t: 'もちろん。また来よう', rx: "ミナは安心したように笑って、手すりから手を離した。「うん。約束ね」", ex: 'happy', ge: 'nod', aff: 1, v: { つながり: 1 }, react: 'プレイヤーは「もちろん、また来よう」と答えた。安心したように笑う' },
+      { t: '（だまって手を差し出す）', rx: "ミナは一瞬おどろいてから、そっと手を重ねた。指先が、少しだけあたたかい。", ex: 'shy', aff: 2, v: { つながり: 1 }, react: 'プレイヤーは黙って手を差し出した。少し驚いて、そっと手をつなぐ', expr: 'shy' },
+      { t: '今日、自分のことが少しわかった気がする', rx: "「ほんと？」ミナはうれしそうにこちらをのぞきこんだ。「なにがわかったの？　聞かせて」", ex: 'happy', ge: 'tilt', aff: 2, v: { 正直: 1 }, react: 'プレイヤーは、今日自分のことが少しわかった気がすると言った。うれしそうに、何がわかったのか聞く' },
     ], unlock: Object.keys(LOCS), next: 'free' },
 };
 let story = { ch: 'c1', aff: 0, flags: [], unlocked: ['cafe'], log: [], vals: {}, ver: 2 };
@@ -705,13 +750,20 @@ function advance(ev, nextId, unlock) {
     else { const nx = STORY[story.ch]; if (nx.loc !== curLoc) toast(`地図から「${LOCS[nx.loc].name}」へ行けるようになりました`); }
   }, 2500);
 }
+function showReaction(text) {
+  $('storyNarr').textContent = text; $('storyLine').textContent = ''; $('choices').innerHTML = '';
+  const b = document.createElement('button'); b.textContent = 'つづける'; b.onclick = () => { $('storyBox').classList.remove('open'); storyOpen = false; };
+  $('choices').appendChild(b); $('storyBox').classList.add('open');
+  clearTimeout(showReaction.t); showReaction.t = setTimeout(() => { $('storyBox').classList.remove('open'); storyOpen = false; }, 14000);
+}
 function choose(ev, c) {
-  $('storyBox').classList.remove('open'); storyOpen = false;
+  storyOpen = true;
   story.aff += c.aff || 0; if (c.flag) story.flags.push(c.flag);
   for (const [k, v] of Object.entries(c.v || {})) story.vals[k] = (story.vals[k] || 0) + v;
   story.log.push(`${ev.title}：「${c.t}」`);
   remember(`（${ev.title}）プレイヤーは「${c.t}」と答えた`);
-  if (c.expr) setExpression(c.expr, 8); else if ((c.aff || 0) >= 2) setExpression('happy', 6); else if ((c.aff || 0) <= 0) setExpression('neutral', 3);
+  setExpression(c.expr || c.ex || ((c.aff || 0) >= 2 ? 'happy' : 'neutral'), 8); if (c.ge) startGesture(c.ge);
+  showReaction(c.rx || 'ミナは少し考えてから、こちらを見てうなずいた。');
   stopPlayback();
   live.sendText(`（${c.react}。あなたらしく1〜2文で反応して）`);
   advance(ev, c.next, c.unlock);
@@ -766,13 +818,14 @@ function askMinaReflect() {
   stopPlayback();
   live.sendText(`（プレイヤーが自分のことを知りたがっている。これまでの答え：${story.log.slice(-8).join(' / ') || 'まだ少ない'}。価値観の傾向（数字は回数）：${sum}。決めつけずに、あなたが感じたことを1〜2文で伝えて、プレイヤーが本当に大事にしていることや本当はやりたいことを考えられる問いを、ひとつだけ投げかけて）`);
 }
-function clearDrinks() { for (const w of ['mina', 'player', 'food']) if (drinks[w]) { drinks[w].removeFromParent(); drinks[w] = null; } chr.holdingCup = null; deliveries.length = 0; }
+function clearDrinks() { if (curLoc !== 'izakaya') for (const w of ['mina', 'player', 'food']) if (drinks[w]) { drinks[w].removeFromParent(); drinks[w] = null; } chr.holdingCup = null; deliveries.length = 0; }
 function goTo(id, announce = true) {
   const L = LOCS[id]; if (!L) return;
   $('fade').classList.add('on');
   setTimeout(() => {
     if (id !== curLoc) clearDrinks();
-    curLoc = id; store.set('loc', id);
+    curLoc = id; store.set('loc', id); drinks = drinkSets[id] ||= { mina: null, player: null, food: null };
+    if (id === 'izakaya' && !iz.items.length) setTimeout(() => { if (curLoc === 'izakaya' && !iz.items.length) { deliver('food', 'お通し', 0.1); toast('お通しです'); } }, 2500);
     for (const [k, g] of Object.entries(groups)) g.visible = k === id;
     setPose(L.pose); chr.root.position.set(L.mina[0], 0, L.mina[1]); chr.root.rotation.y = L.mina[2];
     player.position.set(L.cam[0], 0, L.cam[1]); camera.position.y = L.cam[2]; yaw = 0; pitch = L.cam[3];
@@ -828,10 +881,119 @@ const DRINKS = {
 };
 const MENUS = { cafe: ['ブレンドコーヒー', 'カフェラテ', '紅茶', 'ココア', '抹茶ラテ', 'クリームソーダ'], izakaya: ['生ビール', 'ハイボール', '日本酒', 'ウーロン茶', '焼き鳥', '枝豆', 'だし巻き卵'] };
 const isFood = n => DRINKS[n] && DRINKS[n].kind === 'plate';
+
 const DRINK_NAMES = Object.keys(DRINKS);
 const TABLE_TOP = 0.735;
 const SPOTS = { mina: new THREE.Vector3(-0.14, TABLE_TOP, -0.2), player: new THREE.Vector3(0.16, TABLE_TOP, 0.12), food: new THREE.Vector3(0.04, TABLE_TOP, -0.02) };
-const drinks = { mina: null, player: null, food: null };
+const drinkSets = {}; let drinks = drinkSets.cafe = { mina: null, player: null, food: null };
+// ================= 居酒屋のメニュー（料理と飲み物の3Dモデルはすべて自作） =================
+const IZ_SLOTS = [[0, -0.02], [-0.24, 0.0], [0.24, 0.0], [-0.44, -0.06], [0.44, -0.06], [0, -0.2], [-0.12, 0.17], [0.14, 0.2], [-0.36, 0.2], [0.42, 0.24], [-0.46, -0.26], [0.46, -0.27], [-0.27, -0.2], [0.29, -0.2]];
+const IZ_SPOT = { mina: [-0.3, -0.27], player: [0.3, 0.3] };
+const iz = { items: [] }; // テーブルに並んでいる皿・グラス（古い順）
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, ...o });
+const china = M(0xf6f2ea, { roughness: 0.3 }), glassMat = new THREE.MeshStandardMaterial({ color: 0xeaf4f2, transparent: true, opacity: 0.32, roughness: 0.05 });
+function dish(type, g) { // 器
+  if (type === 'round') add(new THREE.CylinderGeometry(0.1, 0.08, 0.016, 28), china, 0, 0.008, 0, g);
+  if (type === 'oval') { const m = add(new THREE.CylinderGeometry(0.1, 0.085, 0.014, 28), M(0xe9e2d4, { roughness: 0.35 }), 0, 0.007, 0, g); m.scale.set(1.5, 1, 0.8); }
+  if (type === 'square') add(new THREE.BoxGeometry(0.17, 0.014, 0.17), M(0x2b2522, { roughness: 0.4 }), 0, 0.007, 0, g);
+  if (type === 'board') add(new THREE.BoxGeometry(0.24, 0.022, 0.13), M(0xc9a06a, { roughness: 0.7 }), 0, 0.011, 0, g);
+  if (type === 'small') add(new THREE.CylinderGeometry(0.06, 0.045, 0.03, 20), M(0x3d5a6e, { roughness: 0.4 }), 0, 0.015, 0, g);
+  if (type === 'bowl') { add(new THREE.CylinderGeometry(0.07, 0.045, 0.06, 24, 1, true), M(0x7a3b22, { roughness: 0.35, side: THREE.DoubleSide }), 0, 0.03, 0, g); add(new THREE.CylinderGeometry(0.045, 0.045, 0.006, 20), M(0x7a3b22), 0, 0.003, 0, g); }
+}
+const scatter = (g, n, fn, sx, sz, y) => { for (let i = 0; i < n; i++) { const m = fn(i); m.position.set((Math.random() - .5) * sx, y + Math.random() * 0.01, (Math.random() - .5) * sz); m.rotation.set(Math.random() * 0.4, Math.random() * 6, Math.random() * 0.4); g.add(m); } };
+const mesh = (geo, mat) => new THREE.Mesh(geo, mat);
+const skewer = (g, x, z, cols, rot = 0) => { const s = new THREE.Group(); s.position.set(x, 0.035, z); s.rotation.set(Math.PI / 2, 0, rot); g.add(s); add(new THREE.CylinderGeometry(0.002, 0.002, 0.2), M(0xd8c49a), 0, 0.01, 0, s); cols.forEach((c, k) => add(new THREE.SphereGeometry(0.015, 8, 6), M(c, { roughness: 0.7 }), 0, -0.05 + k * 0.032, 0, s).scale.set(1, 1.15, 0.8)); };
+const sliceRow = (g, n, col, x0, z0, w = 0.05) => { for (let i = 0; i < n; i++) { const m = add(new THREE.BoxGeometry(w, 0.012, 0.03), M(col, { roughness: 0.35 }), x0 + i * 0.028, 0.03 + i * 0.002, z0, g); m.rotation.set(0.25, 0.3, 0); } };
+function glass(g, r, h, col, op = 0.82) { add(new THREE.CylinderGeometry(r, r * 0.9, h, 20, 1, true), glassMat, 0, h / 2, 0, g); const liq = add(new THREE.CylinderGeometry(r * 0.94, r * 0.86, h * 0.84, 20), new THREE.MeshStandardMaterial({ color: col, transparent: true, opacity: op, roughness: 0.1 }), 0, h * 0.42, 0, g); liq.userData = { full: h * 0.84, base: 0 }; return liq; }
+const BROWN = 0x8a4a22, GOLD = 0xd99a3a, NEGI = 0x7aa848, RICE = 0xf6f2e8;
+// [名前, カテゴリ, 値段, ひとこと, つくり方, 飲み物なら { tall }]
+const IZ_MENU = [
+  ['お通し', 'とりあえず', 300, 'きんぴらごぼう', g => { dish('small', g); scatter(g, 18, () => mesh(new THREE.BoxGeometry(0.03, 0.004, 0.004), M(0x6a3a1a)), 0.06, 0.06, 0.03); }],
+  ['枝豆', 'とりあえず', 380, '塩ゆで', g => { dish('round', g); scatter(g, 18, () => mesh(new THREE.CapsuleGeometry(0.008, 0.03, 4, 6), M(0x6aa040)), 0.13, 0.12, 0.02); }],
+  ['冷奴', 'とりあえず', 350, 'ねぎと生姜をのせて', g => { dish('square', g); add(new THREE.BoxGeometry(0.08, 0.04, 0.06), M(0xf8f6ee, { roughness: 0.4 }), 0, 0.035, 0, g); scatter(g, 10, () => mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.004, 6), M(NEGI)), 0.05, 0.04, 0.057); add(new THREE.SphereGeometry(0.008, 8, 6), M(0xe8c060), 0.01, 0.06, 0, g); }],
+  ['冷やしトマト', 'とりあえず', 400, '塩とマヨネーズで', g => { dish('round', g); for (let i = 0; i < 6; i++) { const m = add(new THREE.SphereGeometry(0.03, 12, 8, 0, Math.PI), M(0xd8301e, { roughness: 0.35 }), Math.cos(i) * 0.05, 0.02, Math.sin(i) * 0.05, g); m.rotation.set(-Math.PI / 2, 0, i); m.scale.set(1, 1, 0.5); } }],
+  ['たこわさ', 'とりあえず', 420, 'つんとくる', g => { dish('small', g); scatter(g, 8, () => mesh(new THREE.SphereGeometry(0.01, 8, 6), M(0xc89a90, { roughness: 0.3 })), 0.05, 0.05, 0.03); add(new THREE.SphereGeometry(0.01, 8, 6), M(0x9ac060), 0.02, 0.04, 0, g); }],
+  ['もろきゅう', 'とりあえず', 380, 'もろみ味噌つき', g => { dish('oval', g); for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.11, 0.016, 0.016), M(i % 2 ? 0x3e7a32 : 0xbfd8a0), 0, 0.024, -0.04 + i * 0.02, g); add(new THREE.SphereGeometry(0.018, 10, 8), M(0x6a3a18), 0.09, 0.025, 0, g); }],
+  ['焼き鳥盛り合わせ', '焼き物', 880, 'ねぎま・つくね・皮・ハツ・ぼんじり', g => { dish('oval', g); skewer(g, -0.07, 0, [BROWN, NEGI, BROWN, NEGI]); skewer(g, -0.035, 0, [0x6a3a1a, 0x6a3a1a, 0x6a3a1a]); skewer(g, 0, 0, [GOLD, GOLD, GOLD, GOLD]); skewer(g, 0.035, 0, [0x7a2a1a, 0x7a2a1a, 0x7a2a1a]); skewer(g, 0.07, 0, [0xc0884a, 0xc0884a, 0xc0884a]); }],
+  ['ねぎま', '焼き物', 180, 'たれ・塩', g => { dish('round', g); skewer(g, -0.02, 0, [BROWN, NEGI, BROWN, NEGI], 0.2); skewer(g, 0.025, 0, [BROWN, NEGI, BROWN, NEGI], 0.2); }],
+  ['つくね', '焼き物', 200, '卵黄つき', g => { dish('round', g); skewer(g, 0, 0, [0x6a3a1a, 0x6a3a1a, 0x6a3a1a], 0.3); add(new THREE.SphereGeometry(0.018, 12, 8), M(0xf2a020, { roughness: 0.2 }), 0.06, 0.02, 0.03, g).scale.y = 0.5; }],
+  ['ほっけ焼き', '焼き物', 680, '大ぶりの開き', g => { dish('oval', g); const f = add(new THREE.SphereGeometry(0.1, 16, 8), M(0xb0783a, { roughness: 0.6 }), 0, 0.022, 0, g); f.scale.set(1.25, 0.12, 0.55); add(new THREE.ConeGeometry(0.008, 0.04, 6), M(0xd8e8a0), 0.12, 0.02, 0.03, g).rotation.z = 1.4; }],
+  ['厚揚げ焼き', '焼き物', 420, '生姜醤油で', g => { dish('square', g); for (let i = 0; i < 4; i++) add(new THREE.BoxGeometry(0.04, 0.03, 0.04), M(0xc08440, { roughness: 0.6 }), -0.045 + (i % 2) * 0.045, 0.03, -0.022 + Math.floor(i / 2) * 0.045, g); scatter(g, 8, () => mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.004, 6), M(NEGI)), 0.08, 0.08, 0.047); }],
+  ['唐揚げ', '揚げ物', 580, 'レモンつき', g => { dish('round', g); add(new THREE.CircleGeometry(0.07, 12), M(0x8ac050, { side: THREE.DoubleSide }), 0, 0.018, 0, g).rotation.x = -Math.PI / 2; for (let i = 0; i < 5; i++) add(new THREE.DodecahedronGeometry(0.026, 1), M(0xb06a28, { roughness: 0.8 }), Math.cos(i * 1.3) * 0.04, 0.035 + (i === 4 ? 0.02 : 0), Math.sin(i * 1.3) * 0.04, g); add(new THREE.SphereGeometry(0.02, 10, 6, 0, Math.PI), M(0xf0e040), 0.07, 0.03, 0.04, g); }],
+  ['軟骨唐揚げ', '揚げ物', 480, 'こりこり', g => { dish('round', g); scatter(g, 14, () => mesh(new THREE.DodecahedronGeometry(0.013, 0), M(0xc0803a, { roughness: 0.8 })), 0.1, 0.1, 0.028); }],
+  ['フライドポテト', '揚げ物', 420, '揚げたて', g => { dish('round', g); scatter(g, 22, () => mesh(new THREE.BoxGeometry(0.06, 0.009, 0.009), M(0xf0c050, { roughness: 0.7 })), 0.11, 0.11, 0.025); }],
+  ['アジフライ', '揚げ物', 520, 'ソースで', g => { dish('oval', g); for (let i = 0; i < 2; i++) { const f = add(new THREE.SphereGeometry(0.05, 12, 8), M(0xc88a3a, { roughness: 0.9 }), -0.04 + i * 0.07, 0.025, 0, g); f.scale.set(1.3, 0.3, 0.8); } scatter(g, 16, () => mesh(new THREE.BoxGeometry(0.04, 0.003, 0.004), M(0xd8eac0)), 0.05, 0.05, 0.03); }],
+  ['揚げ出し豆腐', '揚げ物', 480, 'あたたかいおつゆで', g => { dish('bowl', g); add(new THREE.CylinderGeometry(0.06, 0.06, 0.004, 20), M(0xb07a3a, { roughness: 0.2 }), 0, 0.03, 0, g); for (let i = 0; i < 2; i++) add(new THREE.BoxGeometry(0.04, 0.035, 0.04), M(0xd8a050, { roughness: 0.8 }), -0.022 + i * 0.044, 0.045, 0, g); add(new THREE.SphereGeometry(0.012, 8, 6), M(0xf2f0e8), 0, 0.068, 0, g); }],
+  ['刺身三点盛り', '刺身', 980, 'まぐろ・サーモン・たい', g => { dish('board', g); sliceRow(g, 3, 0xb0202a, -0.09, -0.02); sliceRow(g, 3, 0xf08a50, -0.01, 0.02); sliceRow(g, 3, 0xf2e6e0, 0.06, -0.02); scatter(g, 12, () => mesh(new THREE.BoxGeometry(0.03, 0.004, 0.004), M(0xffffff)), 0.18, 0.04, 0.026); add(new THREE.SphereGeometry(0.01, 8, 6), M(0x8ab040), 0.1, 0.03, 0.04, g); }],
+  ['まぐろ刺し', '刺身', 680, '赤身', g => { dish('square', g); sliceRow(g, 5, 0xb0202a, -0.055, 0); }],
+  ['しめさば', '刺身', 580, '自家製', g => { dish('square', g); sliceRow(g, 5, 0xc8c0c8, -0.055, 0); }],
+  ['だし巻き卵', '一品', 520, 'ふわふわ、大根おろし添え', g => { dish('oval', g); add(new THREE.BoxGeometry(0.13, 0.035, 0.05), M(0xf2c64a, { roughness: 0.6 }), -0.01, 0.03, 0, g); add(new THREE.SphereGeometry(0.015, 10, 8), M(0xf6f2ea), 0.08, 0.02, 0.01, g); }],
+  ['ポテトサラダ', '一品', 420, 'こしょう多め', g => { dish('round', g); add(new THREE.SphereGeometry(0.045, 14, 10), M(0xf0e2b8, { roughness: 0.9 }), 0, 0.02, 0, g).scale.y = 0.6; add(new THREE.SphereGeometry(0.01, 8, 6), M(0x5a8a3a), 0.02, 0.05, 0.01, g); }],
+  ['もつ煮込み', '一品', 580, '味噌でじっくり', g => { dish('bowl', g); add(new THREE.CylinderGeometry(0.062, 0.062, 0.004, 20), M(0x8a5a2a, { roughness: 0.2 }), 0, 0.045, 0, g); scatter(g, 8, () => mesh(new THREE.DodecahedronGeometry(0.012, 0), M(0xb08a6a)), 0.07, 0.07, 0.05); scatter(g, 10, () => mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.004, 6), M(NEGI)), 0.07, 0.07, 0.058); }],
+  ['肉じゃが', '一品', 520, '甘めの味つけ', g => { dish('bowl', g); scatter(g, 6, () => mesh(new THREE.DodecahedronGeometry(0.018, 0), M(0xe0b060, { roughness: 0.8 })), 0.07, 0.07, 0.045); scatter(g, 4, () => mesh(new THREE.BoxGeometry(0.03, 0.005, 0.02), M(0x8a5a40)), 0.06, 0.06, 0.055); }],
+  ['焼きおにぎり', '〆', 380, '醤油の香り', g => { dish('round', g); for (let i = 0; i < 2; i++) { const o = add(new THREE.CylinderGeometry(0.035, 0.035, 0.025, 3), M(0xa86a30, { roughness: 0.9 }), -0.03 + i * 0.06, 0.03, 0, g); o.rotation.x = Math.PI / 2; } }],
+  ['お茶漬け', '〆', 450, '梅か鮭で', g => { dish('bowl', g); add(new THREE.CylinderGeometry(0.062, 0.062, 0.004, 20), M(0xd8c07a, { roughness: 0.15 }), 0, 0.048, 0, g); scatter(g, 10, () => mesh(new THREE.BoxGeometry(0.015, 0.003, 0.004), M(0x2a3a20)), 0.05, 0.05, 0.052); add(new THREE.SphereGeometry(0.01, 8, 6), M(0xc0283a), 0, 0.055, 0, g); }],
+  ['焼きそば', '〆', 580, 'ソース味', g => { dish('round', g); scatter(g, 30, () => mesh(new THREE.TorusGeometry(0.02, 0.003, 4, 10, 4), M(0x9a6a30)), 0.1, 0.1, 0.03); scatter(g, 6, () => mesh(new THREE.BoxGeometry(0.02, 0.003, 0.02), M(0x8ac050)), 0.08, 0.08, 0.04); }],
+  ['生ビール', 'ドリンク', 550, '中ジョッキ', g => { const l = glass(g, 0.042, 0.13, 0xe0a630); add(new THREE.CylinderGeometry(0.041, 0.041, 0.022, 20), M(0xfbf6ea, { roughness: 0.9 }), 0, 0.12, 0, g); add(new THREE.TorusGeometry(0.03, 0.007, 8, 14, Math.PI), glassMat, 0.052, 0.065, 0, g).rotation.z = -Math.PI / 2; return l; }, { tall: true }],
+  ['瓶ビール', 'ドリンク', 650, '大瓶とグラス', g => { const b = new THREE.Group(); b.position.set(0.06, 0, -0.02); g.add(b); add(new THREE.LatheGeometry([[0, 0], [0.035, 0], [0.036, 0.15], [0.016, 0.21], [0.014, 0.27], [0, 0.27]].map(p => new THREE.Vector2(p[0], p[1])), 18), M(0x5a3210, { roughness: 0.2 }), 0, 0, 0, b); add(new THREE.CylinderGeometry(0.037, 0.037, 0.06, 18, 1, true), M(0xf0e6c8), 0, 0.09, 0, b); const l = glass(g, 0.028, 0.09, 0xe0a630); return l; }, { tall: true }],
+  ['ハイボール', 'ドリンク', 450, 'レモン入り', g => { const l = glass(g, 0.036, 0.15, 0xead2a0, 0.6); for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.022, 0.022, 0.022), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }), (i - 1) * 0.012, 0.1 - i * 0.02, 0.005, g); add(new THREE.CylinderGeometry(0.02, 0.02, 0.004, 14), M(0xf0e040), 0.012, 0.12, 0.012, g).rotation.x = 1.2; return l; }, { tall: true }],
+  ['レモンサワー', 'ドリンク', 450, '甘さひかえめ', g => { const l = glass(g, 0.036, 0.15, 0xf0ecd0, 0.55); add(new THREE.CylinderGeometry(0.024, 0.024, 0.004, 14), M(0xf2e030), 0, 0.11, 0.01, g).rotation.x = 1.4; return l; }, { tall: true }],
+  ['ウーロンハイ', 'ドリンク', 450, 'すっきり', g => glass(g, 0.036, 0.15, 0x6a3a14, 0.75), { tall: true }],
+  ['日本酒', 'ドリンク', 600, '冷やで一合', g => { add(new THREE.LatheGeometry([[0, 0], [0.035, 0], [0.042, 0.05], [0.03, 0.1], [0.012, 0.13], [0.016, 0.145], [0, 0.145]].map(p => new THREE.Vector2(p[0], p[1])), 18), china, 0.07, 0, 0.02, g); add(new THREE.CylinderGeometry(0.024, 0.018, 0.03, 16, 1, true), china, 0, 0.015, 0, g); const l = add(new THREE.CylinderGeometry(0.022, 0.017, 0.024, 16), M(0xf2ecd8, { roughness: 0.1 }), 0, 0.012, 0, g); l.userData = { full: 0.024, base: 0 }; return l; }, { tall: false }],
+  ['焼酎お湯割り', 'ドリンク', 480, '芋・麦', g => { add(new THREE.CylinderGeometry(0.04, 0.034, 0.09, 20, 1, true), china, 0, 0.045, 0, g); const l = add(new THREE.CylinderGeometry(0.038, 0.034, 0.075, 20), M(0xf2ecd8, { roughness: 0.1, transparent: true, opacity: 0.6 }), 0, 0.0375, 0, g); l.userData = { full: 0.075, base: 0 }; add(new THREE.TorusGeometry(0.022, 0.006, 8, 14), china, 0.048, 0.05, 0, g); return l; }, { tall: false }],
+  ['梅酒ロック', 'ドリンク', 500, '大きな氷で', g => { const l = glass(g, 0.04, 0.08, 0xc08a30, 0.75); add(new THREE.BoxGeometry(0.04, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 }), 0, 0.055, 0, g); add(new THREE.SphereGeometry(0.014, 10, 8), M(0x8a6a20), 0.015, 0.02, 0.01, g); return l; }, { tall: false }],
+  ['ウーロン茶', 'ドリンク', 300, 'ソフトドリンク', g => glass(g, 0.036, 0.15, 0x6a3a14, 0.85), { tall: true }],
+  ['コーラ', 'ドリンク', 300, 'ソフトドリンク', g => glass(g, 0.036, 0.15, 0x2a1408, 0.9), { tall: true }],
+];
+const IZ_CATS = [...new Set(IZ_MENU.map(m => m[1]))];
+const IZ_BY = Object.fromEntries(IZ_MENU.map(m => [m[0], { name: m[0], cat: m[1], price: m[2], note: m[3], build: m[4], drink: m[5] }]));
+for (const it of Object.values(IZ_BY)) DRINKS[it.name] = it.drink ? { kind: 'iz', tall: it.drink.tall, note: it.note } : { kind: 'plate', note: it.note };
+MENUS.izakaya = IZ_MENU.map(m => m[0]);
+function buildIz(name) {
+  const it = IZ_BY[name], g = new THREE.Group();
+  const liq = it.build(g);
+  g.userData = { name, liquid: liq || null, level: 1, grow: 0 };
+  g.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  return g;
+}
+function izPlaceOnSlot(obj) {
+  const used = new Set(iz.items.map(o => o.userData.slot));
+  let idx = IZ_SLOTS.findIndex((_, i) => !used.has(i));
+  if (idx < 0) { // 空きがなければ一番古い皿を下げてもらう
+    const old = iz.items.find(o => o !== drinks.mina && o !== drinks.player);
+    if (old) { idx = old.userData.slot; old.removeFromParent(); iz.items.splice(iz.items.indexOf(old), 1); toast('店員さんが空いたお皿を下げてくれました'); } else idx = 0;
+  }
+  obj.userData.slot = idx; obj.position.set(IZ_SLOTS[idx][0], TABLE_TOP, IZ_SLOTS[idx][1]);
+}
+function izPlace(who, name) {
+  const obj = buildIz(name), it = IZ_BY[name];
+  obj.scale.setScalar(0.01); groups.izakaya.add(obj);
+  if (it.drink && (who === 'mina' || who === 'player')) {
+    const prev = drinks[who];
+    if (prev) { prev.userData.slot = -1; izPlaceOnSlot(prev); } // 前のグラスはテーブルの空いたところへ
+    obj.userData.slot = -2 - (who === 'mina' ? 0 : 1); obj.position.set(IZ_SPOT[who][0], TABLE_TOP, IZ_SPOT[who][1]);
+    drinks[who] = obj;
+  } else izPlaceOnSlot(obj);
+  iz.items.push(obj); growing.push(obj);
+  chime();
+}
+const growing = [];
+// メニューの写真（料理の3Dモデルを小さく撮影）
+let thumbR = null; const thumbScene = new THREE.Scene(), thumbCam = new THREE.PerspectiveCamera(32, 4 / 3, 0.01, 10);
+thumbScene.add(new THREE.HemisphereLight(0xfff4e8, 0x6a5040, 1.5)); { const d = new THREE.DirectionalLight(0xffffff, 1.8); d.position.set(0.6, 1.5, 1); thumbScene.add(d); }
+const thumbCache = {};
+function thumb(name) {
+  if (thumbCache[name]) return thumbCache[name];
+  if (!thumbR) { thumbR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }); thumbR.setSize(160, 120); thumbR.outputColorSpace = THREE.SRGBColorSpace; }
+  const m = buildIz(name); thumbScene.add(m);
+  const box = new THREE.Box3().setFromObject(m), c = box.getCenter(new THREE.Vector3()), s = Math.max(0.12, box.getSize(new THREE.Vector3()).length());
+  thumbCam.position.set(c.x, c.y + s * 0.85, c.z + s * 1.15); thumbCam.lookAt(c);
+  thumbR.setClearColor(0x2a221c, 1); thumbR.render(thumbScene, thumbCam);
+  thumbScene.remove(m);
+  return (thumbCache[name] = thumbR.domElement.toDataURL('image/jpeg', 0.85));
+}
+const tableList = () => curLoc === 'izakaya' ? iz.items.map(o => o.userData.name + (o.userData.liquid && o.userData.level < 0.2 ? '（空）' : '')).join('、') : '';
+
 function makeDrink(name) {
   const d = DRINKS[name], g = new THREE.Group();
   const china = std(0xf6f2ea, { roughness: 0.25 }), glassM = new THREE.MeshStandardMaterial({ color: 0xe8f4f0, transparent: true, opacity: 0.35, roughness: 0.05 });
@@ -874,7 +1036,8 @@ function makeDrink(name) {
 function setLevel(dr, level) {
   dr.userData.level = Math.max(0, level);
   const L = dr.userData.liquid, u = L.userData;
-  if (['soda', 'beer', 'highball', 'choko'].includes(DRINKS[dr.userData.name].kind)) { L.scale.y = Math.max(0.02, dr.userData.level); L.position.y = u.full * L.scale.y / 2; }
+  if (!L) return;
+  if (['soda', 'beer', 'highball', 'choko', 'iz'].includes(DRINKS[dr.userData.name].kind)) { L.scale.y = Math.max(0.02, dr.userData.level); L.position.y = u.full * L.scale.y / 2; }
   else L.position.y = u.base + (u.full - u.base) * dr.userData.level;
   L.visible = dr.userData.level > 0.01;
 }
@@ -883,7 +1046,7 @@ function deliver(who, name, delay = 3.5) {
   const menu = MENUS[curLoc] || DRINK_NAMES;
   if (!menu.includes(name)) name = menu.find(n => n.includes(name) || name.includes(n)) || menu[0];
   if (isFood(name)) who = 'food';
-  deliveries.push({ who, name, t: delay });
+  deliveries.push({ who, name, t: delay, iz: curLoc === 'izakaya' });
   return name;
 }
 function placeDrink(who, name) {
@@ -1013,7 +1176,7 @@ function systemPrompt() {
 【二人の関係】${relText()}
 【これまでの出来事】${story.log.slice(-6).join(' / ') || 'まだ特にない'}
 【移動】プレイヤーがどこかへ行きたいと言ったら、画面の「地図」から一緒に移動できる。行ける場所：${story.unlocked.map(id => LOCS[id].name).join('、')}。
-${MENUS[curLoc] ? `【このお店のメニュー】${MENUS[curLoc].join('、')}。あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。` : ''}
+${MENUS[curLoc] ? `【このお店のメニュー】${MENUS[curLoc].join('、')}。${tableList() ? `テーブルの上：${tableList()}。` : ''}あなたの飲み物：${mine}。プレイヤーの飲み物：${theirs}。` : ''}
 【問いかけ】ときどき、プレイヤーが本当に大事にしていることや、本当はどうしたいのかを、押しつけずにひとつ問いかける。答えを評価したり、正解を示したりはしない。
 【体】あなたには体があり、ツールで動ける。注文は order_drink、飲むときは sip_drink、窓の外を見るときは look_outside、感情が動いたら set_expression、身振りは gesture。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。
 【注意】「（ ）」で囲まれた文はお店の中で起きたことの通知で、プレイヤーの発言ではない。それに自然に反応する。
@@ -1195,19 +1358,35 @@ $('send').onclick = sendTyped;
 $('msg').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); sendTyped(); } });
 
 // 注文（お店ごとのメニュー）
+let izTab = 'とりあえず';
+function orderItem(name) {
+  const menu = MENUS[curLoc];
+  deliver('player', name);
+  const forMina = $('orderForMina').checked && !isFood(name);
+  toast(`${name}を注文しました`);
+  if (live.ready) live.sendText(forMina ? `（プレイヤーが${name}を注文した。あなたも自分の飲みたいものを order_drink で頼んで）` : `（プレイヤーが${name}を注文した）`);
+  else if (forMina) { const ds = menu.filter(n => !isFood(n)); deliver('mina', ds[Math.floor(Math.random() * Math.min(ds.length, 6))], 4.5); }
+}
 function buildMenu() {
-  const menu = MENUS[curLoc]; $('orderBtn').style.display = menu ? '' : 'none'; $('drinks').innerHTML = '';
+  const menu = MENUS[curLoc]; $('orderBtn').style.display = menu ? '' : 'none'; $('drinks').innerHTML = ''; $('tabs').innerHTML = '';
+  $('order').classList.toggle('iz', curLoc === 'izakaya');
   if (!menu) return;
+  if (curLoc === 'izakaya') {
+    $('menuTitle').textContent = 'お品書き';
+    for (const c of IZ_CATS) { const b = document.createElement('button'); b.textContent = c; b.className = c === izTab ? 'on' : ''; b.onclick = () => { izTab = c; buildMenu(); }; $('tabs').appendChild(b); }
+    for (const m of IZ_MENU.filter(m => m[1] === izTab)) {
+      const b = document.createElement('button'); b.className = 'card';
+      b.innerHTML = `<img alt=""><div><span class="price">${m[2]}円</span>${m[0]}<small>${m[3]}</small></div>`;
+      b.onclick = () => { $('order').classList.remove('open'); orderItem(m[0]); };
+      $('drinks').appendChild(b);
+      requestAnimationFrame(() => { try { b.querySelector('img').src = thumb(m[0]); } catch (e) { console.warn(e); } });
+    }
+    return;
+  }
+  $('menuTitle').textContent = 'メニュー';
   for (const name of menu) {
     const b = document.createElement('button'); b.innerHTML = `${name}<small>${DRINKS[name].note}</small>`;
-    b.onclick = () => {
-      $('order').classList.remove('open');
-      deliver('player', name);
-      const forMina = $('orderForMina').checked && !isFood(name);
-      toast(`${name}を注文しました`);
-      if (live.ready) live.sendText(forMina ? `（プレイヤーが${name}を注文した。あなたも自分の飲みたいものを order_drink で頼んで）` : `（プレイヤーが${name}を注文した）`);
-      else if (forMina) deliver('mina', menu.filter(n => !isFood(n))[Math.floor(Math.random() * 4)], 4.5);
-    };
+    b.onclick = () => { $('order').classList.remove('open'); orderItem(name); };
     $('drinks').appendChild(b);
   }
 }
@@ -1276,7 +1455,7 @@ function updateCharacter(dt, t) {
   // ひとくち飲む動き
   if (chr.sipT > 0) {
     chr.sipT -= dt; const p = chr.sipT, dr = chr.holdingCup;
-    const mouthW = chr.root.localToWorld(new THREE.Vector3(0, (dr && DRINKS[dr.userData.name].tall !== undefined ? (DRINKS[dr.userData.name].tall ? 0.98 : 1.1) : DRINKS[dr ? dr.userData.name : 'ブレンドコーヒー'].kind === 'soda' ? 0.98 : 1.08), 0.24)), home = SPOTS.mina.clone();
+    const mouthW = chr.root.localToWorld(new THREE.Vector3(0, (dr && DRINKS[dr.userData.name].tall !== undefined ? (DRINKS[dr.userData.name].tall ? 0.98 : 1.1) : DRINKS[dr ? dr.userData.name : 'ブレンドコーヒー'].kind === 'soda' ? 0.98 : 1.08), 0.24)), home = curLoc === 'izakaya' ? new THREE.Vector3(IZ_SPOT.mina[0], TABLE_TOP, IZ_SPOT.mina[1]) : SPOTS.mina.clone();
     const lift = p > 2.6 ? (3.2 - p) / 0.6 : p > 0.6 ? 1 : p / 0.6;
     if (dr) { dr.position.lerpVectors(home, mouthW, THREE.MathUtils.smoothstep(lift, 0, 1)); dr.rotation.x = -0.5 * THREE.MathUtils.smoothstep(lift, 0.6, 1); if (p < 1.6 && p > 1.5) setLevel(dr, dr.userData.level - 0.12); }
     reachTo(rArm, dr ? dr.position.clone().add(new THREE.Vector3(0.05, 0.03, 0)) : restPos(-1), k);
@@ -1357,13 +1536,14 @@ function updateDrinks(dt) {
   for (let i = deliveries.length - 1; i >= 0; i--) {
     const d = deliveries[i]; d.t -= dt;
     if (d.t <= 0) {
-      deliveries.splice(i, 1); placeDrink(d.who, d.name);
+      deliveries.splice(i, 1); if (d.iz) { if (curLoc !== 'izakaya') continue; izPlace(d.who, d.name); } else placeDrink(d.who, d.name);
       if (d.who === 'mina') live.sendText(`（あなたが頼んだ${d.name}が届いた）`);
       else if (d.who === 'food') live.sendText(`（${d.name}がテーブルに届いた）`);
       else { toast(`${d.name}が届きました`); live.sendText(`（プレイヤーの${d.name}が届いた）`); }
     }
   }
-  for (const who of ['mina', 'player']) { const dr = drinks[who]; if (dr && dr.userData.grow < 1) { dr.userData.grow = Math.min(1, dr.userData.grow + dt * 2.5); dr.scale.setScalar(THREE.MathUtils.smoothstep(dr.userData.grow, 0, 1)); } }
+  for (let i = growing.length - 1; i >= 0; i--) { const o = growing[i]; o.userData.grow = Math.min(1, o.userData.grow + dt * 2.5); o.scale.setScalar(THREE.MathUtils.smoothstep(o.userData.grow, 0, 1)); if (o.userData.grow >= 1) growing.splice(i, 1); }
+  if (curLoc !== 'izakaya') for (const who of ['mina', 'player']) { const dr = drinks[who]; if (dr && dr.userData.grow < 1) { dr.userData.grow = Math.min(1, dr.userData.grow + dt * 2.5); dr.scale.setScalar(THREE.MathUtils.smoothstep(dr.userData.grow, 0, 1)); } }
   if (drinks.player && Math.random() < dt / 90) setLevel(drinks.player, drinks.player.userData.level - 0.1); // 自分のカップも少しずつ減っていく
 }
 
