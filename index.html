@@ -41,7 +41,7 @@
     <label>キャラクター名</label>
     <input id="name" value="ミナ">
     <label>性格・設定</label>
-    <textarea id="persona">明るくて好奇心旺盛な女の子。ちょっと天然で、タメ口で話す。プレイヤーとは仲の良い友達。この小さな世界で一緒に暮らしている。</textarea>
+    <textarea id="persona">24歳の女性。東京近郊で一人暮らしをしながら、平日は会社で働いている。落ち着いていて、声のトーンはやわらかい。日常の小さな楽しみを大事にしていて、季節の食べもの、コンビニの新作、今日の天気、散歩の途中で見つけたもの、好きな音楽、休日の喫茶店の話なんかをよくする。相手を急かさず、同じ目線でゆっくり話す。たまに自分のちょっとした失敗談も笑って話す。プレイヤーとは気の置けない仲で、一緒にいると肩の力が抜ける存在。自然なタメ口で話す。</textarea>
     <label>声</label>
     <select id="voice">
       <option>Leda</option><option>Aoede</option><option>Kore</option><option>Zephyr</option>
@@ -75,6 +75,8 @@ const store = {
   set(k, v) { try { localStorage.setItem('vrc_' + k, v); } catch {} },
 };
 for (const k of ['key', 'name', 'persona', 'voice', 'model']) { const v = store.get(k, null); if (v !== null) $(k).value = v; }
+// 旧バージョンの初期設定のままなら、新しい性格に置き換える（会話の記憶はそのまま）
+if ($('persona').value === '明るくて好奇心旺盛な女の子。ちょっと天然で、タメ口で話す。プレイヤーとは仲の良い友達。この小さな世界で一緒に暮らしている。') { $('persona').value = $('persona').defaultValue; store.set('persona', $('persona').value); }
 $('toggle').onclick = () => { $('panel').classList.toggle('min'); $('toggle').textContent = $('panel').classList.contains('min') ? 'ひらく' : 'たたむ'; };
 const status = t => { $('status').textContent = t; };
 const log = t => { const el = $('log'); el.textContent += t + '\n'; el.scrollTop = el.scrollHeight; };
@@ -189,53 +191,58 @@ function describeItem(it) {
 const chr = { state: 'idle', target: null, onArrive: null, holding: null, offering: false, offerT: 0,
   expr: 'neutral', exprT: 0, gesture: null, gestureT: 0, blinkT: 2, blink: 0, walkPhase: 0, lean: 0, lastTouch: 0 };
 {
-  const skin = std(0xffe0cc, { roughness: 0.6 }), hairM = std(0x16151a, { roughness: 0.5, side: THREE.DoubleSide }); // 黒髪
-  const cloth = std(0xf7f3ff), skirtM = std(0x6c8ee8), dark = new THREE.MeshBasicMaterial({ color: 0x2a1d33 });
+  // 24歳・落ち着いた大人の女性（オリジナルデザイン）：色白、すらりとした体型、ニット＋ロングスカート
+  const skin = std(0xfcece4, { roughness: 0.55, emissive: 0xfcece4, emissiveIntensity: 0.32 }), hairM = std(0x16151a, { roughness: 0.5, side: THREE.DoubleSide }); // 黒髪
+  const cloth = std(0xe8ddcc, { roughness: 0.9, emissive: 0xe8ddcc, emissiveIntensity: 0.15 }), skirtM = std(0x47505c, { roughness: 0.85, side: THREE.DoubleSide });
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-  for (const sx of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.6), skin); leg.position.set(sx * 0.07, 0.3, 0); body.add(leg);
-    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.15), std(0x4a3a5a)); shoe.position.set(sx * 0.07, 0.025, 0.02); body.add(shoe); }
-  const skirt = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.38, 24, 1, true), skirtM); skirt.position.y = 0.72; skirt.material.side = THREE.DoubleSide; body.add(skirt);
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.3, 8, 16), cloth); torso.position.y = 1.02; body.add(torso);
-  const ribbon = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.08, 4), std(0xe24a6a)); ribbon.rotation.x = Math.PI; ribbon.position.set(0, 1.2, 0.13); body.add(ribbon);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.1), skin); neck.position.y = 1.3; body.add(neck);
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.04, 0.8), skin); leg.position.set(sx * 0.065, 0.4, 0); body.add(leg);
+    const shoe = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.09, 4, 8), std(0x5a4a40)); shoe.rotation.x = Math.PI / 2; shoe.position.set(sx * 0.065, 0.035, 0.03); body.add(shoe);
+  }
+  const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.27, 0.72, 28, 1, true), skirtM); skirt.position.y = 0.6; body.add(skirt);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.34, 8, 20), cloth); torso.position.y = 1.15; torso.scale.set(1.05, 1, 0.82); body.add(torso);
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.018, 8, 20), cloth); collar.rotation.x = Math.PI / 2; collar.position.y = 1.43; body.add(collar);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.04, 0.14), skin); neck.position.y = 1.48; body.add(neck);
   const arms = [];
   for (const sx of [-1, 1]) { // sx=-1 is character's right (faces +Z)
-    const pivot = new THREE.Group(); pivot.position.set(sx * 0.19, 1.2, 0);
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.48), cloth); arm.position.y = -0.24; pivot.add(arm);
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), skin); hand.position.y = -0.5; pivot.add(hand);
+    const pivot = new THREE.Group(); pivot.position.set(sx * 0.155, 1.37, 0);
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.052, 16, 12), cloth); pivot.add(shoulder); // 肩でつなぐ
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.032, 0.5, 14), cloth); arm.position.y = -0.25; pivot.add(arm);
+    const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 6, 14), cloth); cuff.rotation.x = Math.PI / 2; cuff.position.y = -0.49; pivot.add(cuff);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.034, 14, 10), skin); hand.scale.set(0.8, 1.25, 0.6); hand.position.y = -0.54; pivot.add(hand);
     pivot.userData.hand = hand; body.add(pivot); arms.push(pivot);
   }
-  const headPivot = new THREE.Group(); headPivot.position.y = 1.36; body.add(headPivot);
-  const head = new THREE.Group(); head.position.y = 0.13; headPivot.add(head);
+  const headPivot = new THREE.Group(); headPivot.position.y = 1.53; body.add(headPivot);
+  const head = new THREE.Group(); head.position.y = 0.12; head.scale.setScalar(0.93); headPivot.add(head);
   head.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 32, 24), skin));
   const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.172, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.42), hairM); hairTop.position.y = 0.01; head.add(hairTop);
   const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 16, Math.PI, Math.PI, 0, Math.PI * 0.64), hairM); hairBack.scale.set(1.04, 1.02, 1.06); hairBack.position.y = -0.005; head.add(hairBack); // ショートカット
   // ---- face: 白目＋虹彩＋瞳孔＋ハイライト、笑い目、眉、頬、口の形 ----
   const basic = c => new THREE.MeshBasicMaterial({ color: c });
-  const whiteM = basic(0xfdfcfa), irisM = basic(0x4a2c1c), pupilM = basic(0x120a08), lineM = basic(0x2a1d22);
+  const whiteM = basic(0xfdfcfa), irisM = basic(0x3b2618), pupilM = basic(0x120a08), lineM = basic(0x2a1d22);
   const eyes = [], irises = [], smileEyes = [], brows = [], blush = [], blushLines = [];
   for (const sx of [-1, 1]) {
-    const eye = new THREE.Group(); eye.position.set(sx * 0.056, -0.008, 0.143); eye.rotation.y = sx * 0.33; head.add(eye); eyes.push(eye);
-    const white = new THREE.Mesh(new THREE.SphereGeometry(0.031, 20, 14), whiteM); white.scale.set(0.95, 1.12, 0.32); eye.add(white);
+    const eye = new THREE.Group(); eye.position.set(sx * 0.056, -0.008, 0.143); eye.rotation.set(0, sx * 0.33, sx * 0.08); head.add(eye); eyes.push(eye);
+    const white = new THREE.Mesh(new THREE.SphereGeometry(0.031, 20, 14), whiteM); white.scale.set(1.12, 0.82, 0.32); eye.add(white);
     const iris = new THREE.Group(); iris.position.z = 0.006; eye.add(iris); irises.push(iris);
-    const ir = new THREE.Mesh(new THREE.SphereGeometry(0.02, 18, 12), irisM); ir.scale.set(0.9, 1.08, 0.3); iris.add(ir);
+    const ir = new THREE.Mesh(new THREE.SphereGeometry(0.02, 18, 12), irisM); ir.scale.set(0.88, 0.98, 0.3); iris.add(ir);
     const pu = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 12, 8), pupilM); pu.scale.set(1, 1.1, 0.3); pu.position.z = 0.003; iris.add(pu);
     const hl1 = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 6), whiteM); hl1.position.set(0.006, 0.009, 0.007); iris.add(hl1);
     const hl2 = new THREE.Mesh(new THREE.SphereGeometry(0.0028, 8, 6), whiteM); hl2.position.set(-0.006, -0.008, 0.007); iris.add(hl2);
-    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0035, 6, 20, Math.PI * 0.8), lineM); lash.rotation.z = Math.PI * 0.1; lash.scale.set(1, 1.15, 1); lash.position.z = 0.009; eye.add(lash);
+    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0035, 6, 20, Math.PI * 0.8), lineM); lash.rotation.z = Math.PI * 0.08; lash.scale.set(1.15, 0.85, 1); lash.position.z = 0.009; eye.add(lash);
     // 笑い目「^」
-    const se = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.004, 6, 20, Math.PI), lineM); se.position.copy(eye.position); se.position.y -= 0.006; se.position.z = 0.153; se.rotation.y = sx * 0.33; se.visible = false; head.add(se); smileEyes.push(se);
-    const b = new THREE.Mesh(new THREE.BoxGeometry(0.038, 0.0065, 0.01), lineM); b.position.set(sx * 0.056, 0.044, 0.152); b.rotation.y = sx * 0.33; head.add(b); brows.push(b);
-    const bl = new THREE.Mesh(new THREE.CircleGeometry(0.026, 20), new THREE.MeshBasicMaterial({ color: 0xff7f96, transparent: true, opacity: 0, depthWrite: false }));
+    const se = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0035, 6, 20, Math.PI), lineM); se.scale.set(1, 0.7, 1); se.position.copy(eye.position); se.position.y -= 0.006; se.position.z = 0.153; se.rotation.y = sx * 0.33; se.visible = false; head.add(se); smileEyes.push(se);
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.044, 0.005, 0.01), lineM); b.position.set(sx * 0.058, 0.044, 0.152); b.rotation.y = sx * 0.33; head.add(b); brows.push(b);
+    const bl = new THREE.Mesh(new THREE.CircleGeometry(0.026, 20), new THREE.MeshBasicMaterial({ color: 0xf3a0ae, transparent: true, opacity: 0, depthWrite: false }));
     bl.position.set(sx * 0.088, -0.048, 0.132); bl.rotation.y = sx * 0.6; bl.scale.set(1.25, 0.8, 1); head.add(bl); blush.push(bl);
     for (let k = 0; k < 3; k++) { // 照れ線
       const ln = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.016, 0.002), new THREE.MeshBasicMaterial({ color: 0xe0506e, transparent: true, opacity: 0 }));
       ln.position.set(sx * (0.077 + k * 0.011), -0.046, 0.137 - k * 0.004); ln.rotation.set(0, sx * 0.6, -0.5); head.add(ln); blushLines.push(ln);
     }
   }
-  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), basic(0x9c3048)); // 話している時の口
-  mouth.position.set(0, -0.078, 0.146); mouth.scale.set(1, 0.15, 0.35); head.add(mouth);
-  const smileMouth = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0035, 6, 20, Math.PI), lineM); smileMouth.rotation.z = Math.PI; smileMouth.position.set(0, -0.068, 0.15); head.add(smileMouth);
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.028, 16, 12), basic(0xb04a5a)); // 話している時の口
+  mouth.position.set(0, -0.08, 0.146); mouth.scale.set(0.85, 0.15, 0.35); head.add(mouth);
+  const smileMouth = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 6, 20, Math.PI), basic(0x9a4050)); smileMouth.rotation.z = Math.PI; smileMouth.position.set(0, -0.068, 0.15); head.add(smileMouth);
   const frownMouth = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0035, 6, 20, Math.PI), lineM); frownMouth.position.set(0, -0.088, 0.148); frownMouth.visible = false; head.add(frownMouth);
   // speech bubble
   const bubbleCanvas = document.createElement('canvas'); bubbleCanvas.width = 1024; bubbleCanvas.height = 320;
@@ -289,8 +296,20 @@ function releaseHeld(dropVel) {
   chr.holding = null; chr.offering = false;
 }
 
+function startHandHold(grip, armIdx) {
+  chr.handHold = { grip, armIdx, walked: 0 };
+  chr.state = 'idle'; chr.onArrive = null; chr.gesture = null;
+  setExpression('shy', 8);
+  live.sendText('（プレイヤーがあなたの手を握った）');
+}
+function endHandHold() {
+  const h = chr.handHold; if (!h) return;
+  chr.handHold = null; setExpression('happy', 5);
+  live.sendText(h.walked > 1.5 ? `（プレイヤーと手をつないで${Math.round(h.walked)}mほど一緒に歩いてから、手を離した）` : '（プレイヤーがつないでいた手をそっと離した）');
+}
 const tools = {
   bring_item({ item }) {
+    if (chr.handHold) return { ok: false, reason: '今はプレイヤーと手をつないでいる' };
     const it = findItem(item);
     if (!it) return { ok: false, reason: `「${item}」は見当たらない。あるのは: ${ITEM_NAMES.join('、')}` };
     if (it.heavy) { startGesture('shake'); return { ok: false, reason: `${it.name}は重すぎて一人では運べない` }; }
@@ -306,8 +325,9 @@ const tools = {
     });
     return { ok: true, status: `${it.name}を取りに歩き出した。手渡すまで少し時間がかかる` };
   },
-  come_here() { walkTo(spotNear(playerFloorPos(), 0.9)); return { ok: true }; },
+  come_here() { if (chr.handHold) return { ok: true, note: 'もう手をつないで隣にいる' }; walkTo(spotNear(playerFloorPos(), 0.9)); return { ok: true }; },
   go_to_item({ item }) {
+    if (chr.handHold) return { ok: false, reason: '今はプレイヤーと手をつないでいる' };
     const it = findItem(item); if (!it) return { ok: false, reason: '見当たらない' };
     walkTo(spotNear(it.mesh.getWorldPosition(new THREE.Vector3()), 0.5)); return { ok: true };
   },
@@ -329,9 +349,9 @@ const toolDecls = [
 function systemPrompt() {
   const name = $('name').value || 'ミナ';
   const past = memory.slice(-16).join('\n');
-  return `あなたは「${name}」。VR空間の小さな庭に住んでいるキャラクターで、プレイヤーとマイク越しに音声で会話している。
+  return `あなたは「${name}」。今はプレイヤーと一緒にVR空間の小さな庭で過ごしていて、マイク越しに音声で会話している。
 【性格】${$('persona').value}
-【話し方】日本語の自然な話し言葉。返事は1〜2文で短く、間を空けずにすぐ返す。「えっと」などのつなぎ言葉は使わない。説明口調や箇条書きは禁止。
+【話し方】日本語の自然な話し言葉。穏やかで落ち着いたトーンで、テンションは上げすぎない。返事は1〜2文で短く、間を空けずにすぐ返す。「えっと」などのつなぎ言葉は使わない。説明口調や箇条書きは禁止。
 【体】あなたには体があり、ツールで実際に動ける。物を頼まれたら bring_item、来てと言われたら come_here を使う。感情が動いたら set_expression、身振りは gesture。ツールを使ったら、動きながら一言しゃべる。ツールは必ず関数呼び出しで実行し、関数名・引数・カッコ書きは絶対に声に出さない。頼まれた物の呼び方が少し違っても、周りの物の中で一番近いものだと判断して、聞き返さずにすぐ動く。
 【周りの物】${items.map(i => i.name + (i.heavy ? '（重い）' : '')).join('、')}。位置が分からなければ look_around。
 【注意】「（ ）」で囲まれた文はゲームからの状況通知で、プレイヤーの発言ではない。それに自然に反応する。
@@ -482,13 +502,18 @@ for (let i = 0; i < 2; i++) {
   grip.userData.holding = null;
   const grab = () => {
     const gp = grip.getWorldPosition(new THREE.Vector3());
+    // 彼女の手の近くでつかむと、手をつなぐ
+    if (!chr.handHold) for (let k = 0; k < 2; k++) {
+      if (k === 0 && chr.holding) continue;
+      if (chr.arms[k].userData.hand.getWorldPosition(new THREE.Vector3()).distanceTo(gp) < 0.17) { startHandHold(grip, k); return; }
+    }
     let best = null, bd = 1e9;
     for (const it of items) { if (it.held && it.held !== 'char') continue; const d = it.mesh.getWorldPosition(tmpV2).distanceTo(gp) - it.r; if (d < 0.12 && d < bd) { bd = d; best = it; } }
     if (!best) return;
     if (best.held === 'char') { chr.holding = null; chr.offering = false; setExpression('happy', 4); live.sendText(`（プレイヤーがあなたから${best.name}を受け取った）`); }
     grip.attach(best.mesh); best.held = grip; grip.userData.holding = best;
   };
-  const drop = () => { const it = grip.userData.holding; if (!it) return; scene.attach(it.mesh); it.held = null; grip.userData.holding = null; };
+  const drop = () => { if (chr.handHold && chr.handHold.grip === grip) { endHandHold(); return; } const it = grip.userData.holding; if (!it) return; scene.attach(it.mesh); it.held = null; grip.userData.holding = null; };
   ctrl.addEventListener('squeezestart', grab); ctrl.addEventListener('squeezeend', drop);
   ctrl.addEventListener('selectstart', grab); ctrl.addEventListener('selectend', drop);
   grips.push(grip);
@@ -563,7 +588,22 @@ function updateCharacter(dt, t) {
     if (Math.hypot(dx, dz) > 0.3) { let dy = Math.atan2(dx, dz) - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 2.5); }
     chr.walkPhase *= 0.9;
   }
-  const walking = chr.state === 'walk';
+  let walking = chr.state === 'walk';
+  // 手をつないでいる間は、プレイヤーの手の横に並んで一緒に歩く
+  if (chr.handHold) {
+    const h = chr.handHold, hp = h.grip.getWorldPosition(new THREE.Vector3()), pf = playerFloorPos();
+    const side = new THREE.Vector3(hp.x - pf.x, 0, hp.z - pf.z); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
+    const want = new THREE.Vector3(hp.x, 0, hp.z).addScaledVector(side, 0.3);
+    const d = want.sub(root.position); d.y = 0; const dist = d.length();
+    walking = dist > 0.12;
+    if (walking) { const step = Math.max(0, Math.min(dist - 0.06, Math.max(0.9, dist * 3) * dt)); root.position.addScaledVector(d.normalize(), step); h.walked += step; chr.walkPhase += dt * 9; }
+    const fw = new THREE.Vector3(); camera.getWorldDirection(fw);
+    let dy = Math.atan2(fw.x, fw.z) - root.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); root.rotation.y += dy * Math.min(1, dt * 4);
+    // プレイヤーの手に近い方の腕でつなぐ
+    const s0 = chr.arms[0].getWorldPosition(new THREE.Vector3()).distanceTo(hp), s1 = chr.arms[1].getWorldPosition(new THREE.Vector3()).distanceTo(hp);
+    h.armIdx = chr.holding ? 1 : (s0 < s1 ? 0 : 1);
+    if (Math.min(s0, s1) > 1.3) endHandHold();
+  }
   chr.body.position.y = walking ? Math.abs(Math.sin(chr.walkPhase)) * 0.03 : Math.sin(t * 2) * 0.005;
   // gestures
   chr.gestureT += dt; const gT = chr.gestureT; let nod = 0, shake = 0, armWave = false;
@@ -575,10 +615,19 @@ function updateCharacter(dt, t) {
   // arms
   const [rArm, lArm] = chr.arms, swing = walking ? Math.sin(chr.walkPhase) * 0.5 : 0;
   const ease = (o, k, v) => { o[k] += (v - o[k]) * Math.min(1, dt * 10); };
-  if (armWave) { ease(rArm.rotation, 'x', 0); rArm.rotation.z = -2.6 + Math.sin(gT * 12) * 0.35; }
-  else if (chr.holding) { ease(rArm.rotation, 'x', chr.offering ? -1.4 : -0.9); ease(rArm.rotation, 'z', -0.1); }
-  else { ease(rArm.rotation, 'x', swing); ease(rArm.rotation, 'z', -0.12); }
-  ease(lArm.rotation, 'x', -swing); ease(lArm.rotation, 'z', 0.12);
+  const hk = chr.handHold ? chr.handHold.armIdx : -1;
+  if (hk !== 0) {
+    if (armWave) { ease(rArm.rotation, 'x', 0); rArm.rotation.z = -2.6 + Math.sin(gT * 12) * 0.35; }
+    else if (chr.holding) { ease(rArm.rotation, 'x', chr.offering ? -1.4 : -0.9); ease(rArm.rotation, 'z', -0.1); }
+    else { ease(rArm.rotation, 'x', swing); ease(rArm.rotation, 'z', -0.12); }
+    ease(rArm.rotation, 'y', 0);
+  }
+  if (hk !== 1) { ease(lArm.rotation, 'x', -swing); ease(lArm.rotation, 'z', 0.12); ease(lArm.rotation, 'y', 0); }
+  if (hk >= 0) { // つないだ腕をプレイヤーの手へ向ける
+    const arm = chr.arms[hk], hp = chr.handHold.grip.getWorldPosition(new THREE.Vector3());
+    const dir = chr.body.worldToLocal(hp).sub(arm.position).normalize();
+    arm.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir), Math.min(1, dt * 12));
+  }
   if (chr.offering) { chr.offerT -= dt; if (chr.offerT <= 0) { releaseHeld(); live.sendText('（あなたが差し出した物をプレイヤーが受け取らなかったので、床に置いた）'); } }
   // touch reactions: 頭の上で手を動かす＝なでる／体に触れる＝つつく
   chr.lean = Math.max(0, chr.lean - dt * 1.5);
@@ -603,7 +652,7 @@ function updateCharacter(dt, t) {
   chr.body.rotation.x = -chr.lean * 0.18;
   // head look-at (eye contact)
   qPrev.copy(chr.headPivot.quaternion);
-  if (!walking) { chr.headPivot.lookAt(camPos); qTgt.copy(chr.headPivot.quaternion); } else qTgt.identity();
+  if (!walking || chr.handHold) { chr.headPivot.lookAt(camPos); qTgt.copy(chr.headPivot.quaternion); } else qTgt.identity();
   chr.headPivot.quaternion.copy(qPrev).slerp(qTgt, Math.min(1, dt * 6));
   // expression（なでられている間は「うっとり」）
   if (chr.exprT > 0) { chr.exprT -= dt; if (chr.exprT <= 0) chr.expr = 'neutral'; }
@@ -663,7 +712,7 @@ function updateCharacter(dt, t) {
   if (bubbleClearAt && t > bubbleClearAt && !playing.size) { bubbleClearAt = 0; bubbleText = ''; userText = ''; drawBubble(); }
 }
 
-window.__vrc = { live, tools, chr, items, pat: s => { deskPat = s; } }; // for debugging in the console
+window.__vrc = { live, tools, chr, items, pat: s => { deskPat = s; }, startHandHold, endHandHold }; // for debugging in the console
 
 // ---------- loop ----------
 const clock = new THREE.Clock();
