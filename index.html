@@ -355,7 +355,7 @@ $('mute').onclick = () => setMuted(!muted);
 
 // ---------- Gemini Live API client ----------
 const live = {
-  ws: null, ready: false, wantOpen: false, retries: 0, inTx: '', outTx: '',
+  ws: null, ready: false, wantOpen: false, retries: 0, inTx: '', outTx: '', fast: true, lastHeard: 0, waiting: false,
   connect() {
     const key = $('key').value.trim();
     if (!key) { status('APIキーが未入力です（Google AI Studio で無料発行できます）'); return; }
@@ -364,14 +364,20 @@ const live = {
     const url = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=' + encodeURIComponent(key);
     const ws = this.ws = new WebSocket(url);
     ws.onopen = () => {
-      ws.send(JSON.stringify({ setup: {
+      const setup = {
         model: 'models/' + $('model').value.trim(),
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: $('voice').value } } } },
         systemInstruction: { parts: [{ text: systemPrompt() }] },
         tools: [{ functionDeclarations: toolDecls }],
         inputAudioTranscription: {}, outputAudioTranscription: {},
         contextWindowCompression: { slidingWindow: {} },
-      } }));
+      };
+      if (this.fast) {
+        // 速度優先: 考える時間をなくし、話し終わりを早めに判定する
+        setup.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+        setup.realtimeInputConfig = { automaticActivityDetection: { endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH', prefixPaddingMs: 100, silenceDurationMs: 350 } };
+      }
+      ws.send(JSON.stringify({ setup }));
     };
     ws.onmessage = async ev => {
       const txt = typeof ev.data === 'string' ? ev.data : await ev.data.text();
@@ -380,6 +386,10 @@ const live = {
     };
     ws.onerror = () => status('通信エラー');
     ws.onclose = ev => {
+      if (!this.ready && this.fast && this.wantOpen) {
+        // 速度優先の設定をモデルが受け付けなかった場合は、標準設定でつなぎ直す
+        log('速度優先設定が使えなかったため標準設定で再接続します'); this.fast = false; setTimeout(() => this.connect(), 500); return;
+      }
       this.ready = false;
       const why = ev.reason ? `（${ev.reason}）` : '';
       log(`切断されました code=${ev.code}${why}`);
@@ -407,8 +417,11 @@ const live = {
     if (msg.goAway) { log('サーバーから再接続要求'); try { this.ws.close(); } catch {} }
     const sc = msg.serverContent; if (!sc) return;
     if (sc.interrupted) { stopPlayback(); }
-    if (sc.modelTurn?.parts) for (const p of sc.modelTurn.parts) if (p.inlineData?.data) playPcm24k(p.inlineData.data);
-    if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; userText = this.inTx; drawBubble(); }
+    if (sc.modelTurn?.parts) for (const p of sc.modelTurn.parts) if (p.inlineData?.data) {
+      if (this.waiting) { this.waiting = false; log(`[速度] 応答まで ${((performance.now() - this.lastHeard) / 1000).toFixed(1)}秒`); }
+      playPcm24k(p.inlineData.data);
+    }
+    if (sc.inputTranscription?.text) { this.inTx += sc.inputTranscription.text; userText = this.inTx; drawBubble(); this.lastHeard = performance.now(); this.waiting = true; }
     if (sc.outputTranscription?.text) { this.outTx += sc.outputTranscription.text; bubbleText = this.outTx; drawBubble(); }
     if (sc.turnComplete) {
       const name = $('name').value || 'ミナ';
